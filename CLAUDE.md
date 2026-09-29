@@ -3,7 +3,7 @@
 > Her oturumda otomatik okunur. **Kısa tutulur**: yalnızca her görevde gereken
 > kurallar ve harita burada. Ayrıntı ilgili dosyada.
 >
-> **Son güncelleme:** 22 Eylül 2026
+> **Son güncelleme:** 29 Eylül 2026
 
 ---
 
@@ -24,8 +24,12 @@ Sıradaki karar kullanıcıda → `docs/STRATEJI_GECMISI.md`.
 - Komut satırıyla arası iyi değil — bir kez Python yorumlayıcısına (`>>>`)
   `streamlit run` yazmayı denedi. Bu yüzden her şey çift tıklanan `.bat` ya da
   `/baslat` ile. Komut satırı ayrıntısı anlatma.
-- **git kullanmak istemiyor**, makinede git yok, sürüm kontrolü yok. Büyük
-  değişiklikten önce dosyanın kopyasını `yedek/` klasörüne al.
+- Proje 29 Eylül 2026'da GitHub'a taşındı (git kurulu, dal `main`):
+  https://github.com/gokhan2000/FinansCortex . Kullanıcı git komutlarını
+  bilmiyor → commit/push'u **yalnızca isterse** sen yap. `.gitignore` dışında
+  tutulanlar: `data/`, `araclar/`, `yedek/`, `config/erisim.json`,
+  `config/eposta.json`, `ADRES.txt` (gizli/büyük) — bunları asla ekleme.
+  Büyük değişiklikten önce yine `yedek/`e kopya al (YEDEKLE.bat de sürüyor).
 - Programı **işyerinde de** kullanıyor ("az veri taşıyarak"); iş bilgisayarına
   **hiçbir şey kurulamıyor**, orada yalnızca tarayıcı var.
 - "Programı yavaşlatacak ve kararı engelleyecek yapılardan kaçınalım."
