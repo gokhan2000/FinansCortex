@@ -79,7 +79,7 @@ YEDEKLE.bat         Çift tıkla → proje (~450 KB) tarihli klasöre + data/ te
                     klasöre kopyalanır: G:\My Drive\DeepCortex-Yedek\
 HF_YUKLE.bat        Çift tıkla → kod+veri özel Hugging Face Space'ine (gokhansargin/deepcortex)
                     yüklenir; tabletten takip için. `HF_YUKLE.bat kod` yalnız kodu yeniler. hf/ = Space'in
-                    README'si (Docker YOK, kullanıcı istemedi), scripts/hf_yukle.py = yükleyici (29.09.2026: henüz Space'te denenmedi)
+                    Dockerfile+README (HF artık Streamlit SDK'yı kabul etmiyor; Docker yalnız HF sunucusunda, kullanıcı makinesine Docker gerekmez), scripts/hf_yukle.py = yükleyici (29.09.2026: henüz Space'te denenmedi)
 yedek/              Büyük değişiklik öncesi tek dosya kopyaları
 ```
 

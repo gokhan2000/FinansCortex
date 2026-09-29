@@ -31,7 +31,7 @@ def main() -> None:
     kullanici = api.whoami()["name"]
     repo = f"{kullanici}/{UYGULAMA}"
 
-    api.create_repo(repo, repo_type="space", space_sdk="streamlit",
+    api.create_repo(repo, repo_type="space", space_sdk="docker",
                     private=True, exist_ok=True)
     print(f"Space hazir (ozel): {repo}")
 
@@ -41,7 +41,7 @@ def main() -> None:
         allow_patterns=KOD, ignore_patterns=["**/__pycache__/**", "*.pyc"],
         commit_message="Kod",
     )
-    for ad in ("README.md",):
+    for ad in ("Dockerfile", "README.md"):
         api.upload_file(path_or_fileobj=str(ROOT / "hf" / ad), path_in_repo=ad,
                         repo_id=repo, repo_type="space", commit_message=ad)
 
