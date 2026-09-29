@@ -45,9 +45,12 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-from finans_cortex import storage  # noqa: E402
+from finans_cortex import bulut, storage  # noqa: E402
 from ui import (auth, backtest, charts, home, placeholder,  # noqa: E402
                 strategies, theme, veri)
+
+# Bulutta veritabani yoksa bulut_veri/*.parquet'ten kurulur (yerelde: hicbir sey).
+bulut.hazirla()
 
 HAZIR = {
     "grafikler": charts.render,
