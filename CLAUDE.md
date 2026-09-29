@@ -77,6 +77,9 @@ UZAKTAN.bat         Çift tıkla → parola + Cloudflare tüneliyle internetten 
 EPOSTA_AYARLA.bat   Adresin e-postayla gelmesini kurar (1 kez)
 YEDEKLE.bat         Çift tıkla → proje (~450 KB) tarihli klasöre + data/ tek `veri-son` klasörüne, Google Drive'a
                     klasöre kopyalanır: G:\My Drive\DeepCortex-Yedek\
+HF_YUKLE.bat        Çift tıkla → kod+veri özel Hugging Face Space'ine (gokhansargin/deepcortex)
+                    yüklenir; tabletten takip için. `HF_YUKLE.bat kod` yalnız kodu yeniler. hf/ = Space'in
+                    Dockerfile + README'si, scripts/hf_yukle.py = yükleyici (29.09.2026: henüz Space'te denenmedi)
 yedek/              Büyük değişiklik öncesi tek dosya kopyaları
 ```
 
