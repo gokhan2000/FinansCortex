@@ -47,6 +47,18 @@ Sıradaki karar kullanıcıda → `docs/STRATEJI_GECMISI.md`.
 6. Arayüzü değiştirdiysen **sunucuyu yeniden başlat** — `ui/` ve `src/`
    modülleri Streamlit'in belleğinde kalır.
 
+## Web / bulut oturumu (Claude Code web + Streamlit Cloud)
+
+- Uygulama Streamlit Community Cloud'da, GitHub `main` dalından çalışır; `main`'e
+  push gelince kendiliğinden yenilenir. **Değişiklikleri doğrudan `main`'e gönder**
+  (ayrı dal açarsan Streamlit görmez; dal açtıysan PR'ı `main`'e birleştir).
+- Bulutta `data/market.duckdb` YOK. Veri `bulut_veri/*.parquet`'tedir; açılışta
+  `finans_cortex/bulut.py` veritabanını bunlardan kurar. Yerel `data/` web
+  oturumundan görünmez → orada backtest/veri ölçümü yapma, yalnız kod değiştir.
+- `bulut_veri/`yi yalnız kullanıcı evde `BULUT_VERI_YAZ.bat` çalıştırınca yenilenir;
+  elle düzenleme. Depo PRIVATE, public yapma. `config/erisim.json`/`eposta.json`
+  depoya girmez (`.gitignore`).
+
 ## Bağlam haritası — göreve göre ne okunur
 
 | Görev | Oku |
