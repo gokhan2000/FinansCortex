@@ -1,10 +1,11 @@
-# Her gun Dukascopy'den son barlari ceker, bulut_veri/son.parquet'e yazar.
+# Saatlik (hafta sonu 6 saatte bir) Dukascopy'den son barlari ceker, bulut_veri/son.parquet'e yazar.
 # Streamlit Cloud bu commit'i gorunce uygulamayi yeni veriyle yeniler.
 name: Gunluk veri guncelleme
 
 on:
   schedule:
-    - cron: "20 5 * * *"   # her gun 05:20 UTC (08:20 TR)
+    - cron: "10 * * * 1-5"      # hafta ici her saat, :10'da
+    - cron: "10 */6 * * 0,6"    # hafta sonu 6 saatte bir (BTC 7/24)
   workflow_dispatch:        # elle de calistirilabilir
 
 permissions:
