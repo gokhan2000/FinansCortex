@@ -71,7 +71,9 @@ ikon da yer imi de aynı küçük başlatıcıyı çalıştırır: `scripts/ac.p
 Git olmadığı için kod ve belgelerin tek kopyası proje klasöründe.
 **`YEDEKLE.bat`** (çift tık) projeyi `G:\My Drive\DeepCortex-Yedek\YYYY-MM-DD_SSDD\`
 klasörüne kopyalar (Drive yoksa OneDrive'a, o da yoksa proje klasörünün bir
-üstüne). `robocopy` ile; `data/` (Dukascopy'den yeniden iner), `araclar/`
+üstüne). `robocopy` ile; `data/` tarihli klasöre girmez, ayrıca tek bir
+`DeepCortex-Yedek\veri-son\` klasörüne yazılır (her yedekte üzerine yazılır,
+~200 MB; uygulama açıksa kilit hatası verebilir → kapatıp tekrar). `araclar/`
 (cloudflared kendiliğinden iner), `__pycache__`, `ADRES.txt`, `*.log`
 kopyalanmaz. Doğrulandı: 61 dosya, ~450 KB, 1 saniye. `config/erisim.json`
 Drive'a gider — yalnızca tuzlu PBKDF2 özeti, parola geri çıkarılamaz.

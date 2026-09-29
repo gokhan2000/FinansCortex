@@ -75,7 +75,7 @@ KISAYOL_OLUSTUR.bat Masaüstü/Başlat "DeepCortex" ikonu + Chrome yer imi kurar
 .streamlit/         config.toml (toolbarMode = minimal: Deploy düğmesi yok)
 UZAKTAN.bat         Çift tıkla → parola + Cloudflare tüneliyle internetten erişim
 EPOSTA_AYARLA.bat   Adresin e-postayla gelmesini kurar (1 kez)
-YEDEKLE.bat         Çift tıkla → proje (data/ hariç, ~450 KB) Google Drive'a tarihli
+YEDEKLE.bat         Çift tıkla → proje (~450 KB) tarihli klasöre + data/ tek `veri-son` klasörüne, Google Drive'a
                     klasöre kopyalanır: G:\My Drive\DeepCortex-Yedek\
 yedek/              Büyük değişiklik öncesi tek dosya kopyaları
 ```

@@ -9,8 +9,9 @@ REM Google Drive yoksa OneDrive'a, o da yoksa bu klasorun bir ustune
 REM (DeepCortex-Yedek) yazar.
 REM
 REM KOPYALANMAYANLAR (bilerek):
-REM   data\      ~200 MB veritabani - Dukascopy'den yeniden indirilebilir
-REM              (python scripts\backfill.py, ~23 dakika)
+REM   data\      tarihli klasore kopyalanmaz (her seferinde 200 MB olur);
+REM              ayri tek klasore yazilir: DeepCortex-Yedek\veri-son\
+REM              (her yedekte uzerine yazilir, hep son hali durur)
 REM   araclar\   cloudflared.exe (55 MB) - gerekince kendiliginden iner
 REM   __pycache__, ADRES.txt, *.log - gecici dosyalar
 REM
@@ -37,6 +38,17 @@ REM robocopy: 0-7 basari, 8 ve ustu hata
 if errorlevel 8 (
     echo.
     echo   HATA: Yedek tamamlanamadi. Yukaridaki mesaja bakin.
+    echo.
+    pause
+    exit /b 1
+)
+
+echo   Veri yedekleniyor (veri-son, ~200 MB, birkac dakika surebilir)...
+robocopy "%~dp0data" "%HEDEF_KOK%\veri-son" /E /NFL /NDL /NJH /NP /R:1 /W:1
+REM robocopy: 0-7 basari, 8 ve ustu hata
+if errorlevel 8 (
+    echo.
+    echo   HATA: Veri yedegi tamamlanamadi (uygulama acik olabilir, kapatip tekrar deneyin). Yukaridaki mesaja bakin.
     echo.
     pause
     exit /b 1
