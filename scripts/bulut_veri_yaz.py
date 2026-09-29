@@ -27,6 +27,8 @@ def main() -> None:
                     "(FORMAT parquet, COMPRESSION zstd, COMPRESSION_LEVEL 19)")
         n = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
         print(f"{t}: {n:,} satir, {f.stat().st_size // 1024:,} KB")
+    # Ana veri tazelendi: eski "son gunler" dosyasi artik gereksiz.
+    (hedef / bulut.SON).unlink(missing_ok=True)
     print("Tamam:", hedef)
 
 

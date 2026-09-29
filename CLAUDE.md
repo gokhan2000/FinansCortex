@@ -55,6 +55,11 @@ Sıradaki karar kullanıcıda → `docs/STRATEJI_GECMISI.md`.
 - Bulutta `data/market.duckdb` YOK. Veri `bulut_veri/*.parquet`'tedir; açılışta
   `finans_cortex/bulut.py` veritabanını bunlardan kurar. Yerel `data/` web
   oturumundan görünmez → orada backtest/veri ölçümü yapma, yalnız kod değiştir.
+- **Günlük otomatik veri:** `.github/workflows/veri.yml` her gün 05:20 UTC'de
+  `scripts/bulut_guncelle.py` çalıştırır (Dukascopy → `bulut_veri/son.parquet`, küçük
+  dosya; ana veri her gün git'e yazılmaz). `bulut.hazirla()` ana veri + son.parquet'i
+  birleştirir, dosya değişince yeniden kurar. BIST 30 (`bars_bist`) otomatik
+  güncellenmez (yalnız ana veri). Ana veriyi `BULUT_VERI_YAZ.bat` tazeleyince son.parquet silinir.
 - `bulut_veri/`yi yalnız kullanıcı evde `BULUT_VERI_YAZ.bat` çalıştırınca yenilenir;
   elle düzenleme. Depo PRIVATE, public yapma. `config/erisim.json`/`eposta.json`
   depoya girmez (`.gitignore`).

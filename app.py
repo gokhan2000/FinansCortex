@@ -50,7 +50,9 @@ from ui import (auth, backtest, charts, home, placeholder,  # noqa: E402
                 strategies, theme, veri)
 
 # Bulutta veritabani yoksa bulut_veri/*.parquet'ten kurulur (yerelde: hicbir sey).
-bulut.hazirla()
+if bulut.hazirla():  # yeni veri kuruldu: eski baglanti/onbellekler atilsin
+    st.cache_resource.clear()
+    st.cache_data.clear()
 
 HAZIR = {
     "grafikler": charts.render,
