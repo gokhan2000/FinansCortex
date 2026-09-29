@@ -12,8 +12,10 @@ son.parquet silinir ve tekrar sifirdan birikir.
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,14 +23,16 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import duckdb  # noqa: E402
 
-from finans_cortex import bulut, ingest, storage  # noqa: E402
+from finans_cortex import bist, bulut, ingest, storage  # noqa: E402
 
 
 def main() -> None:
     pq = bulut.PARQUET_DIZINI
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "market.duckdb"
-        bulut.hazirla(db, pq)
+        # Yalniz ANA veriden kur: eski son.parquet'e guvenilmez. Her calismada
+        # ana verinin sonundan bugune tekrar cekilir -> delik varsa kendini onarir.
+        bulut.hazirla(db, pq, son_kullan=False)
 
         con = storage.connect(db)
         try:
@@ -57,6 +61,28 @@ def main() -> None:
                 f"SELECT count(*), max(ts) FROM read_parquet('{son.as_posix()}')"
             ).fetchone()
             print(f"son.parquet: {satir[0]:,} satir, en yeni bar {satir[1]}")
+            # BIST (Yahoo, ayri kaynak): Yahoo her seferinde tum gecmisi verir ve
+            # yavas; gunde 1 kez (BIST kapandiktan sonra, 15 UTC) ya da BIST=1.
+            if os.environ.get("BIST") == "1" or datetime.now(timezone.utc).hour == 15:
+                sonuc = bist.backfill(con, timeframes=("1d", "1h"))
+                print("BIST:", sonuc["eklenen"], "yeni bar,", sonuc["hisse"], "hisse,",
+                      "alinamayan:", sonuc["alinamayan"])
+                sb = pq / bulut.SON_BIST
+                base_b = pq / "bars_bist.parquet"
+                con.execute(
+                    f"""
+                    COPY (
+                      SELECT b.* FROM bars_bist b
+                      JOIN (
+                        SELECT code, timeframe, max(ts) AS son_ts
+                        FROM read_parquet('{base_b.as_posix()}') GROUP BY 1, 2
+                      ) t USING (code, timeframe)
+                      WHERE b.ts >= t.son_ts - INTERVAL 3 DAY
+                      ORDER BY b.code, b.timeframe, b.ts
+                    ) TO '{sb.as_posix()}' (FORMAT parquet, COMPRESSION zstd)
+                    """
+                )
+                print("son_bist.parquet:", sb.stat().st_size // 1024, "KB")
         finally:
             con.close()
 

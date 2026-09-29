@@ -9,7 +9,7 @@ IKI KATMAN
   bars_15m.parquet, bars_bist.parquet, instruments.parquet
       ANA VERI. Kullanici evde BULUT_VERI_YAZ.bat ile tazeler
       (scripts/bulut_veri_yaz.py).
-  son.parquet
+  son.parquet, son_bist.parquet
       SON GUNLER (kucuk, kod sutunlu). GitHub Actions her gun
       scripts/bulut_guncelle.py ile Dukascopy'den ceker ve bunu yazar.
       Ana verinin ustune eklenir (ayni bar varsa ustune yazar).
@@ -32,19 +32,23 @@ from . import storage
 PARQUET_DIZINI = Path(__file__).resolve().parents[2] / "bulut_veri"
 TABLOLAR = ("instruments", "bars_15m", "bars_bist")
 SON = "son.parquet"
+SON_BIST = "son_bist.parquet"
 
 
 def _imza(pq: Path) -> str:
     parcalar = []
-    for ad in [f"{t}.parquet" for t in TABLOLAR] + [SON]:
+    for ad in [f"{t}.parquet" for t in TABLOLAR] + [SON, SON_BIST]:
         f = pq / ad
         parcalar.append(f"{ad}:{f.stat().st_size}" if f.exists() else f"{ad}:-")
     return "|".join(parcalar)
 
 
 def hazirla(db_yolu: Path | str | None = None,
-            parquet_dizini: Path | str | None = None) -> bool:
+            parquet_dizini: Path | str | None = None,
+            son_kullan: bool = True) -> bool:
     """Veritabani yoksa ya da parquet degistiyse kurar. Kurduysa True doner.
+
+    son_kullan=False: yalniz ANA veri (guncelleme betigi, kendini onarsin diye).
 
     Yerelde (parquet dizini yoksa ya da yerel veritabani bulut'tan degilse)
     hicbir sey yapmaz: `.imza` dosyasi yoksa veritabani bulutta kurulmamistir.
@@ -80,7 +84,7 @@ def hazirla(db_yolu: Path | str | None = None,
             f"INSERT INTO bars_bist SELECT * FROM read_parquet('{f['bars_bist']}')"
         )
         son = pq / SON
-        if son.exists():
+        if son_kullan and son.exists():
             con.execute(
                 f"""
                 INSERT OR REPLACE INTO bars_15m
@@ -89,6 +93,12 @@ def hazirla(db_yolu: Path | str | None = None,
                 FROM read_parquet('{son.as_posix()}') s
                 JOIN instruments i ON i.code = s.code
                 """
+            )
+        son_bist = pq / SON_BIST
+        if son_kullan and son_bist.exists():
+            con.execute(
+                f"INSERT OR REPLACE INTO bars_bist "
+                f"SELECT * FROM read_parquet('{son_bist.as_posix()}')"
             )
         con.execute("CHECKPOINT")
     finally:

@@ -29,6 +29,7 @@ def main() -> None:
         print(f"{t}: {n:,} satir, {f.stat().st_size // 1024:,} KB")
     # Ana veri tazelendi: eski "son gunler" dosyasi artik gereksiz.
     (hedef / bulut.SON).unlink(missing_ok=True)
+    (hedef / bulut.SON_BIST).unlink(missing_ok=True)
     print("Tamam:", hedef)
 
 

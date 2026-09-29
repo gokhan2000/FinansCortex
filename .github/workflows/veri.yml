@@ -23,9 +23,11 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python scripts/bulut_guncelle.py
+        env:
+          BIST: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
       - name: Degisiklik varsa gonder
         run: |
           git config user.name "veri-botu"
           git config user.email "veri-botu@users.noreply.github.com"
-          git add bulut_veri/son.parquet
+          git add bulut_veri/son.parquet bulut_veri/son_bist.parquet
           git diff --cached --quiet || (git commit -m "Gunluk veri guncellemesi" && git push)
