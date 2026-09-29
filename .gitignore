@@ -1,0 +1,10 @@
+data/
+araclar/
+yedek/
+__pycache__/
+*.pyc
+*.log
+ADRES.txt
+config/erisim.json
+config/eposta.json
+.claude/settings.local.json

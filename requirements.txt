@@ -1,0 +1,27 @@
+# DeepCortex Finans - Faz 1
+# Kurulum:  pip install -r requirements.txt
+# Python 3.12 ile test edildi.
+
+# Veri kaynagi (ana). Yahoo elendi -- spot ons altin/gumus yok ve 15dk
+# gecmisi 2,5 ay. Detay: docs/VERI_KAYNAGI_BULGULARI.md
+dukascopy-python==4.0.1
+
+# Saklama: tek dosya, sunucu yok
+duckdb==1.5.5
+
+# Islem/hesaplama katmani (anayasa 2.3)
+polars==1.43.2
+numpy==1.26.4
+
+# Streamlit'in dataframe gosterimi ve dukascopy ciktisi icin
+pandas==2.1.4
+pyarrow==24.0.0
+
+# Arayuz
+streamlit==1.59.0
+plotly==6.9.0
+
+# BIST 30 canli sinyal taramasi (src/finans_cortex/bist.py) ve
+# scripts/probe_data_sources.py. Backtest verisi icin KULLANILMIYOR --
+# 15dk gecmisi ~60 gunle sinirli. Veritabanina yazilmaz.
+yfinance==1.6.0

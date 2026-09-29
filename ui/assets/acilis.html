@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>DeepCortex</title>
+<!--
+  Acilis ekrani. scripts/ac.py program KAPALIYKEN Chrome'u bu sayfayla acar;
+  sayfa her saniye programin hazir olup olmadigina bakar ve hazir olunca
+  kendiliginden http://localhost:8503/ adresine gecer.
+
+  Hazirlik yoklamasi <img> ile yapilir (Streamlit /favicon.png sunar):
+  fetch() file:// sayfasindan localhost'a CORS'a takilabiliyor, resim
+  yuklemesi takilmaz. Yuklendiyse sunucu ayakta demektir.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0b0b0d; color: #f2f2f0;
+    font-family: system-ui, "Segoe UI", sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .kutu { text-align: center; }
+  .logo {
+    font-size: 30px; font-weight: 200; letter-spacing: .17em;
+    text-transform: uppercase; text-shadow: 0 0 20px rgba(57,135,229,.3);
+  }
+  .logo b { font-weight: 600; color: #3987e5; text-shadow: 0 0 16px #3987e5; }
+  .alt { margin-top: 26px; font-size: 13px; color: #8b8a93; letter-spacing: .04em; }
+  .cubuk {
+    width: 220px; height: 2px; margin: 18px auto 0 auto; overflow: hidden;
+    background: rgba(255,255,255,.08); border-radius: 2px;
+  }
+  .cubuk::after {
+    content: ""; display: block; width: 40%; height: 100%;
+    background: #3987e5; box-shadow: 0 0 10px #3987e5;
+    animation: kay 1.3s ease-in-out infinite;
+  }
+  @keyframes kay { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+  .hata { color: #d95926; }
+</style>
+</head>
+<body>
+  <div class="kutu">
+    <div class="logo">Deep<b>Cortex</b></div>
+    <div class="cubuk"></div>
+    <div class="alt" id="durum">Veriler guncelleniyor, program aciliyor&hellip;</div>
+  </div>
+<script>
+  var ADRES = "http://localhost:8503/";
+  var basla = Date.now();
+  var SINIR = 240 * 1000;   // 4 dk: ilk dolumda veri guncellemesi uzun surebilir
+
+  function yokla() {
+    var r = new Image();
+    r.onload = function () { location.replace(ADRES); };
+    r.onerror = function () {
+      var sn = Math.round((Date.now() - basla) / 1000);
+      var d = document.getElementById("durum");
+      if (Date.now() - basla > SINIR) {
+        d.className = "alt hata";
+        d.innerHTML = "Program " + sn + " saniyede acilmadi.<br>" +
+          "Gorev cubugundaki <b>DeepCortex</b> penceresine bakin.";
+        return;
+      }
+      if (sn > 20) {
+        d.innerHTML = "Veriler guncelleniyor, program aciliyor&hellip; (" + sn + " sn)";
+      }
+      setTimeout(yokla, 1000);
+    };
+    r.src = ADRES + "favicon.png?t=" + Date.now();
+  }
+  yokla();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Streamlit ayarlari (BASLAT.bat / UZAKTAN.bat proje kokunden calisir).
+# toolbarMode = minimal: sag ustteki "Deploy" dugmesi ve gelistirici menusu
+# gorunmez -- kullanici "ustte gereksiz bosluk/kalabalik" dedi (21.09.2026).
+[client]
+toolbarMode = "minimal"
