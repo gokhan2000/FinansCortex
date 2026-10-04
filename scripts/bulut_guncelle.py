@@ -62,8 +62,8 @@ def main() -> None:
             ).fetchone()
             print(f"son.parquet: {satir[0]:,} satir, en yeni bar {satir[1]}")
             # BIST (Yahoo, ayri kaynak): Yahoo her seferinde tum gecmisi verir ve
-            # yavas; gunde 1 kez (BIST kapandiktan sonra, 15 UTC) ya da BIST=1.
-            if os.environ.get("BIST") == "1" or datetime.now(timezone.utc).hour == 15:
+            # yavas; gunde 1 kez (BIST kapandiktan sonra, 16-17 UTC) ya da BIST=1.
+            if os.environ.get("BIST") == "1" or datetime.now(timezone.utc).hour in (16, 17):
                 sonuc = bist.backfill(con, timeframes=("1d", "1h"))
                 print("BIST:", sonuc["eklenen"], "yeni bar,", sonuc["hisse"], "hisse,",
                       "alinamayan:", sonuc["alinamayan"])
