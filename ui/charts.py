@@ -308,7 +308,8 @@ def sinyal_bilgisi(df: pl.DataFrame, i: int, macd: bool) -> str:
 
 
 def _build_badges(
-    df: pl.DataFrame, colors: dict, limit: int, short: bool
+    df: pl.DataFrame, colors: dict, limit: int, short: bool,
+    n_ref: int | None = None,
 ) -> list[dict]:
     """Chandelier ve MACD sinyallerini etiketli rozet olarak yerlestirir.
 
@@ -346,8 +347,10 @@ def _build_badges(
 
     # Bir rozetin kapladigi yaklasik bar sayisi. Grafik ~1200px ise bar basina
     # 1200/n piksel duser; kisa etiket ~26px, uzun etiket ~48px yer kaplar.
-    badge_px = 32 if short else 56
-    min_gap = max(1, int(badge_px * n / 1200) + 1)
+    # n_ref: ilk bakista GORUNEN bar sayisi (yukluler daha fazla olabilir);
+    # piksel olcegi gorunen pencereye gore hesaplanir.
+    badge_px = 36 if short else 62
+    min_gap = max(1, int(badge_px * (n_ref or n) / 1200) + 1)
 
     items = []
     for i in range(n):
@@ -382,24 +385,30 @@ def _build_badges(
 
         # Buyuk harf = MACD, kucuk harf = Chandelier. Boyut farkiyla birlikte
         # iki ayirt edici kanal olur; kimlik yalnizca renge/boyuta bagli kalmaz.
+        # Chandelier ANA sinyal: buyuk, dolu zemin, beyaz cerceve, kalin yazi.
+        # MACD YARDIMCI: kucuk, silik, yalniz renkli yazi + ince cerceve.
+        # (Onceki surumde ikisi de beyaz yazili dolu kutuydu; MACD, Chandelier'i
+        # bastiriyordu.)
         if big:
             text = ("B" if buy else "S") if short else (
                 "BUY" if buy else "SELL")
-            bg, size, pad, base_shift = _rgba(base, 0.30), 16, 4, 36
+            bg, size, pad, base_shift = _rgba(base, 0.14), 10, 2, 46
+            fcolor, bcolor, bwidth = _rgba(base, 0.85), _rgba(base, 0.55), 1
         else:
             text = ("b" if buy else "s") if short else (
                 "Buy" if buy else "Sell")
-            bg, size, pad, base_shift = base, 13, 3, 16
+            bg, size, pad, base_shift = base, 16, 4, 18
+            fcolor, bcolor, bwidth = "#ffffff", "#ffffff", 2
 
-        shift = base_shift + level * 25
+        shift = base_shift + level * 30
 
         anns.append(dict(
             x=ts_all[i], y=low_all[i] if buy else high_all[i],
             xref="x", yref="y",   # ilk alt panel (fiyat grafigi)
             text="<b>{}</b>".format(text), showarrow=False,
             yshift=-shift if buy else shift,
-            font=dict(size=size, color="#ffffff"),
-            bgcolor=bg, bordercolor=base, borderwidth=1, borderpad=pad,
+            font=dict(size=size, color=fcolor),
+            bgcolor=bg, bordercolor=bcolor, borderwidth=bwidth, borderpad=pad,
             hovertext=sinyal_bilgisi(df, i, big), captureevents=True,
         ))
 
@@ -542,57 +551,15 @@ def make_chart(
         # cizilir (kullanici surukleyip gezebilsin) ama rozet/yogunluk karari
         # yalniz GORUNEN pencereye gore verilir.
         if view_from is not None:
-            pre = df.filter(pl.col("ts") < view_from)
             vis = df.filter(pl.col("ts") >= view_from)
         else:
-            pre, vis = df.clear(), df
+            vis = df
 
-        def _say(d):
-            n = d.filter(pl.col("signal").is_not_null()).height
-            if "macd_cross" in d.columns:
-                n += d.filter(pl.col("macd_cross").is_not_null()).height
-            return n
-
-        def _ucgenler(d):
-            for col, sig, symbol, color, size, label in (
-                ("signal", "BUY", "triangle-up", colors["up"], 12,
-                 "Chandelier al"),
-                ("signal", "SELL", "triangle-down", colors["down"], 12,
-                 "Chandelier sat"),
-                ("macd_cross", "BUY", "triangle-up", colors["up"], 16,
-                 "MACD al"),
-                ("macd_cross", "SELL", "triangle-down", colors["down"], 16,
-                 "MACD sat"),
-            ):
-                if col not in d.columns:
-                    continue
-                mask = (d[col] == sig).fill_null(False)
-                s = d.filter(mask)
-                if s.is_empty():
-                    continue
-                buy = sig == "BUY"
-                ipucu = [sinyal_bilgisi(d, int(j), col == "macd_cross")
-                         for j in mask.arg_true().to_list()]
-                fig.add_trace(
-                    go.Scatter(
-                        x=s["ts"].to_list(),
-                        y=(s["low"] * 0.999 if buy
-                           else s["high"] * 1.001).to_list(),
-                        mode="markers", name=label,
-                        marker=dict(symbol=symbol, size=size, color=color,
-                                    line=dict(width=1,
-                                              color=colors["surface"])),
-                        text=ipucu, hovertemplate="%{text}<extra></extra>",
-                    ),
-                    row=1, col=1,
-                )
-
-        if badge_limit > 0 and _say(vis) > BADGE_DENSITY_LIMIT:
-            _ucgenler(df)          # yogun gorunum: rozet yerine ucgen isaret
-        else:
-            if badge_limit > 0 and not pre.is_empty():
-                _ucgenler(pre)     # pencerenin solu: kucuk ucgenler
-            badges = _build_badges(vis, colors, badge_limit, short_labels)
+        # Tum sinyaller (penceredekiler de, soldaki eskiler de) ayni rozet
+        # bicimiyle cizilir: Chandelier b/s, MACD B/S. Ucgen modu kaldirildi
+        # (kullanici: "eskiler sadece ucgen geliyor, onlar da b/s olsun").
+        badges = _build_badges(df, colors, badge_limit, short_labels,
+                               n_ref=vis.height)
 
     if "trend" in idx:
         r = idx["trend"]
@@ -867,7 +834,6 @@ def render() -> None:
         )
     n_sig_total = _say(disp_vis)
     n_sig_shown = _say(disp_chart.filter(pl.col("ts") >= view_from))
-    dense = badge_limit > 0 and n_sig_shown > BADGE_DENSITY_LIMIT
     st.caption(
         "{} bar · {} - {} ({}) · {} sinyal · {}".format(
             "{:,}".format(disp_vis.height).replace(",", "."),
@@ -876,9 +842,7 @@ def render() -> None:
             zone_label,
             ("{} / {} (tablo: hepsi)".format(n_sig_shown, n_sig_total)
              if n_sig_shown != n_sig_total else n_sig_total),
-            "yogun gorunum: ucgen isaret (rozet icin daha kisa bir aralik "
-            "secin)" if dense
-            else "kucuk rozet = Chandelier, buyuk rozet = MACD",
+            "b/s (buyuk, beyaz cerceveli) = Chandelier, B/S (silik) = MACD",
         ) + " · gerisi icin grafigi surukleyin (Autoscale = tamami)"
     )
 
