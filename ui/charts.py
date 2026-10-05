@@ -82,6 +82,10 @@ WARMUP_BARS = 300
 # kisim cizilir ve kullanici uyarilir -- sessizce yavaslamaktansa soylemek iyi.
 MAX_RENDER_BARS = 8000
 
+# Ilk bakista gorunen pencerenin OTESINDE yuklenen gecmis (gun). Plotly ~8000
+# mumdan sonra yavasladigi icin dilime gore: 15dk ~45 gun, 4s ~1 yil.
+EXTRA_DAYS = {"15m": 45, "1h": 180, "4h": 365, "1d": 1100}
+
 BAR_MINUTES = {"15m": 15, "1h": 60, "4h": 240, "1d": 1440}
 
 # Bu sayidan fazla sinyal varsa rozet yerine kucuk ucgen isaret cizilir.
@@ -441,6 +445,7 @@ def make_chart(
     short_labels: bool,
     timeframe: str = "15m",
     session: str = "24h",
+    view_from=None,
 ) -> go.Figure:
     """Mum grafigi + yone gore renkli Chandelier stopu + sinyal rozetleri.
 
@@ -495,12 +500,22 @@ def make_chart(
                 row=1, col=1,
             )
 
-        n_signals = df.filter(pl.col("signal").is_not_null()).height
-        if "macd_cross" in df.columns:
-            n_signals += df.filter(pl.col("macd_cross").is_not_null()).height
+        # view_from: ilk bakista gorunen pencerenin basi. Daha eski barlar da
+        # cizilir (kullanici surukleyip gezebilsin) ama rozet/yogunluk karari
+        # yalniz GORUNEN pencereye gore verilir.
+        if view_from is not None:
+            pre = df.filter(pl.col("ts") < view_from)
+            vis = df.filter(pl.col("ts") >= view_from)
+        else:
+            pre, vis = df.clear(), df
 
-        if badge_limit > 0 and n_signals > BADGE_DENSITY_LIMIT:
-            # Yogun gorunum: rozet yerine ucgen isaret.
+        def _say(d):
+            n = d.filter(pl.col("signal").is_not_null()).height
+            if "macd_cross" in d.columns:
+                n += d.filter(pl.col("macd_cross").is_not_null()).height
+            return n
+
+        def _ucgenler(d):
             for col, sig, symbol, color, size, label in (
                 ("signal", "BUY", "triangle-up", colors["up"], 7,
                  "Chandelier al"),
@@ -511,14 +526,14 @@ def make_chart(
                 ("macd_cross", "SELL", "triangle-down", colors["down"], 12,
                  "MACD sat"),
             ):
-                if col not in df.columns:
+                if col not in d.columns:
                     continue
-                mask = (df[col] == sig).fill_null(False)
-                s = df.filter(mask)
+                mask = (d[col] == sig).fill_null(False)
+                s = d.filter(mask)
                 if s.is_empty():
                     continue
                 buy = sig == "BUY"
-                ipucu = [sinyal_bilgisi(df, int(j), col == "macd_cross")
+                ipucu = [sinyal_bilgisi(d, int(j), col == "macd_cross")
                          for j in mask.arg_true().to_list()]
                 fig.add_trace(
                     go.Scatter(
@@ -533,8 +548,13 @@ def make_chart(
                     ),
                     row=1, col=1,
                 )
+
+        if badge_limit > 0 and _say(vis) > BADGE_DENSITY_LIMIT:
+            _ucgenler(df)          # yogun gorunum: rozet yerine ucgen isaret
         else:
-            badges = _build_badges(df, colors, badge_limit, short_labels)
+            if badge_limit > 0 and not pre.is_empty():
+                _ucgenler(pre)     # pencerenin solu: kucuk ucgenler
+            badges = _build_badges(vis, colors, badge_limit, short_labels)
 
     if "trend" in idx:
         r = idx["trend"]
@@ -606,6 +626,16 @@ def make_chart(
                      tickfont=dict(color=colors["ink_muted"], size=11))
     fig.update_yaxes(gridcolor=colors["grid"], linecolor=colors["axis"],
                      tickfont=dict(color=colors["ink_muted"], size=11))
+    if view_from is not None and df.height:
+        # Ilk bakista yalniz secilen pencere gorunur; gerisi surukleyerek
+        # (ya da grafigin sag ustundeki "Autoscale" ile tamami) gezilir.
+        vis = df.filter(pl.col("ts") >= view_from)
+        if not vis.is_empty():
+            lo, hi = float(vis["low"].min()), float(vis["high"].max())
+            pay = (hi - lo) * 0.06 or hi * 0.01
+            fig.update_xaxes(range=[view_from, df["ts"][-1]
+                                    + timedelta(minutes=BAR_MINUTES[timeframe])])
+            fig.update_yaxes(range=[lo - pay, hi + pay], row=1, col=1)
     return fig
 
 
@@ -638,7 +668,7 @@ def render() -> None:
     code = st.sidebar.selectbox(
         "Enstruman", [i.code for i in INSTRUMENTS], index=1
     )
-    tf_label = st.sidebar.selectbox("Zaman dilimi", list(TIMEFRAMES), index=0)
+    tf_label = st.sidebar.selectbox("Zaman dilimi", list(TIMEFRAMES), index=2)
     timeframe = TIMEFRAMES[tf_label]
 
     period_label = st.sidebar.selectbox(
@@ -647,6 +677,9 @@ def render() -> None:
         key="period_{}".format(timeframe),  # dilim degisince varsayilan yenilensin
     )
     days = PERIODS[period_label]
+    # Ekranda ilk gorunen pencere `days`; ama ONCESI de yuklenir ki grafik
+    # suruklenerek gezilebilsin ("olcegi degistirince grafigin kalani yok").
+    load_days = max(days, EXTRA_DAYS[timeframe])
 
     st.sidebar.divider()
     profile_name = st.sidebar.radio(
@@ -697,7 +730,7 @@ def render() -> None:
     )
 
     # ---------------- veri ----------------
-    framed, shown_from = load_period(code, timeframe, days)
+    framed, shown_from = load_period(code, timeframe, load_days)
     if framed.is_empty():
         st.warning("Veri yok. Once: python scripts/backfill.py")
         return
@@ -718,7 +751,7 @@ def render() -> None:
 
     trend = None
     if show_trend:
-        t, _ = load_period(code, "4h", days)
+        t, _ = load_period(code, "4h", load_days)
         if not t.is_empty():
             trend = indicators.chandelier_exit(t, config).select(
                 "ts", "direction"
@@ -777,9 +810,13 @@ def render() -> None:
     disp_trend = (trend.with_columns(pl.col("ts").dt.convert_time_zone(tz))
                   if trend is not None else None)
 
+    view_from = disp["ts"][-1] - timedelta(days=days)
+    disp_vis = disp.filter(pl.col("ts") >= view_from)
+
     st.plotly_chart(
         make_chart(disp_chart, disp_trend, colors, show_macd_panel, badge_limit,
-                   short_labels, timeframe, get_instrument(code).session),
+                   short_labels, timeframe, get_instrument(code).session,
+                   view_from=view_from),
         width="stretch",
         config={"scrollZoom": True, "displaylogo": False},
     )
@@ -788,13 +825,13 @@ def render() -> None:
             d.filter(pl.col("macd_cross").is_not_null()).height
             if "macd_cross" in d.columns else 0
         )
-    n_sig_total = _say(disp)
-    n_sig_shown = _say(disp_chart)
+    n_sig_total = _say(disp_vis)
+    n_sig_shown = _say(disp_chart.filter(pl.col("ts") >= view_from))
     dense = badge_limit > 0 and n_sig_shown > BADGE_DENSITY_LIMIT
     st.caption(
         "{} bar · {} - {} ({}) · {} sinyal · {}".format(
-            "{:,}".format(out.height).replace(",", "."),
-            disp["ts"][0].strftime("%d.%m.%Y %H:%M"),
+            "{:,}".format(disp_vis.height).replace(",", "."),
+            disp_vis["ts"][0].strftime("%d.%m.%Y %H:%M"),
             disp["ts"][-1].strftime("%d.%m.%Y %H:%M"),
             zone_label,
             ("{} / {} (tablo: hepsi)".format(n_sig_shown, n_sig_total)
@@ -802,7 +839,7 @@ def render() -> None:
             "yogun gorunum: ucgen isaret (rozet icin daha kisa bir aralik "
             "secin)" if dense
             else "kucuk rozet = Chandelier, buyuk rozet = MACD",
-        )
+        ) + " · gerisi icin grafigi surukleyin (Autoscale = tamami)"
     )
 
     # ---------------- tablo gorunumu ----------------
@@ -814,7 +851,7 @@ def render() -> None:
         cond = pl.col("signal").is_not_null()
         if has_macd:
             cond = cond | pl.col("macd_cross").is_not_null()
-        table = disp.filter(cond)   # tabloda da secili saat dilimi
+        table = disp_vis.filter(cond)   # tabloda da secili saat dilimi
         if table.is_empty():
             st.caption("Bu aralikta sinyal yok.")
         else:
