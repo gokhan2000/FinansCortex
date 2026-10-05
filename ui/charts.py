@@ -346,7 +346,7 @@ def _build_badges(
 
     # Bir rozetin kapladigi yaklasik bar sayisi. Grafik ~1200px ise bar basina
     # 1200/n piksel duser; kisa etiket ~26px, uzun etiket ~48px yer kaplar.
-    badge_px = 26 if short else 48
+    badge_px = 32 if short else 56
     min_gap = max(1, int(badge_px * n / 1200) + 1)
 
     items = []
@@ -385,13 +385,13 @@ def _build_badges(
         if big:
             text = ("B" if buy else "S") if short else (
                 "BUY" if buy else "SELL")
-            bg, size, pad, base_shift = _rgba(base, 0.30), 14, 4, 26
+            bg, size, pad, base_shift = _rgba(base, 0.30), 16, 4, 36
         else:
             text = ("b" if buy else "s") if short else (
                 "Buy" if buy else "Sell")
-            bg, size, pad, base_shift = base, 9, 2, 12
+            bg, size, pad, base_shift = base, 13, 3, 16
 
-        shift = base_shift + level * 19
+        shift = base_shift + level * 25
 
         anns.append(dict(
             x=ts_all[i], y=low_all[i] if buy else high_all[i],
@@ -434,6 +434,44 @@ def thin_signals(df: pl.DataFrame, fraction: float = 0.25) -> pl.DataFrame:
     return df.with_columns(
         [pl.when(keep).then(pl.col(c)).otherwise(None).alias(c) for c in cols]
     )
+
+
+# Mum bilgisi (acilis/yuksek/dusuk/kapanis) yalniz yeterince YAKINLASINCA
+# gorunsun; uzakta mum kutusu fiyati orter. Plotly'nin kendi olayi sunucuya
+# gelmedigi icin kucuk bir tarayici betigi: gorunen aralikta MUM_ESIGI'nden
+# fazla mum varsa mum izinin hoverinfo'su "skip" olur. Betik calismazsa
+# bilgi hep gorunur (eski davranis). Sayfaya bir kez eklenir.
+MUM_ESIGI = 40
+
+_MUM_BILGISI_JS = """
+<script>
+(function () {
+  if (window.__dcMumBilgi) return;
+  window.__dcMumBilgi = true;
+  var ESIK = %d;
+  function ms(v) { return typeof v === 'number' ? v : Date.parse(String(v).replace(' ', 'T')); }
+  setInterval(function () {
+    document.querySelectorAll('.js-plotly-plot').forEach(function (gd) {
+      try {
+        var fd = gd._fullData, r = gd._fullLayout && gd._fullLayout.xaxis && gd._fullLayout.xaxis.range;
+        if (!fd || !r) return;
+        for (var i = 0; i < fd.length; i++) {
+          var t = fd[i];
+          if (t.type !== 'candlestick' || !t.x || t.x.length < 2) continue;
+          var adim = Infinity, n = Math.min(t.x.length, 60);
+          for (var k = 1; k < n; k++) {
+            var d = ms(t.x[k]) - ms(t.x[k - 1]);
+            if (d > 0 && d < adim) adim = d;
+          }
+          var bar = (ms(r[1]) - ms(r[0])) / adim;
+          t.hoverinfo = bar > ESIK ? 'skip' : 'all';
+        }
+      } catch (e) {}
+    });
+  }, 300);
+})();
+</script>
+""" % MUM_ESIGI
 
 
 def make_chart(
@@ -517,13 +555,13 @@ def make_chart(
 
         def _ucgenler(d):
             for col, sig, symbol, color, size, label in (
-                ("signal", "BUY", "triangle-up", colors["up"], 7,
+                ("signal", "BUY", "triangle-up", colors["up"], 12,
                  "Chandelier al"),
-                ("signal", "SELL", "triangle-down", colors["down"], 7,
+                ("signal", "SELL", "triangle-down", colors["down"], 12,
                  "Chandelier sat"),
-                ("macd_cross", "BUY", "triangle-up", colors["up"], 12,
+                ("macd_cross", "BUY", "triangle-up", colors["up"], 16,
                  "MACD al"),
-                ("macd_cross", "SELL", "triangle-down", colors["down"], 12,
+                ("macd_cross", "SELL", "triangle-down", colors["down"], 16,
                  "MACD sat"),
             ):
                 if col not in d.columns:
@@ -820,6 +858,8 @@ def render() -> None:
         width="stretch",
         config={"scrollZoom": True, "displaylogo": False},
     )
+    st.html(_MUM_BILGISI_JS, unsafe_allow_javascript=True)
+
     def _say(d):
         return d.filter(pl.col("signal").is_not_null()).height + (
             d.filter(pl.col("macd_cross").is_not_null()).height
