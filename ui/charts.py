@@ -368,6 +368,36 @@ def _build_badges(
     return anns
 
 
+def thin_signals(df: pl.DataFrame, fraction: float = 0.25) -> pl.DataFrame:
+    """Sinyallerin yalniz ~`fraction` kadarini gosterir (yalniz GORUNUM icin).
+
+    Kullanici: "ekranda cok sinyal var, takip edemiyorum, 4te 1'e dusur".
+    Sinyal sirali gezilir; bir onceki GOSTERILEN sinyale `bosluk` bardan
+    yakin olanlar atilir. Bosluk, kalan sayi hedefi gecmeyene kadar buyutulur.
+    Hesap, tablo ve ust satirdaki "son sinyal" etkilenmez.
+    """
+    cols = [c for c in ("signal", "macd_cross") if c in df.columns]
+    if not cols:
+        return df
+    has = pl.any_horizontal([pl.col(c).is_not_null() for c in cols])
+    idx = df.with_row_index("_i").filter(has)["_i"].to_list()
+    hedef = max(1, -(-len(idx) // int(round(1 / fraction))))
+    if len(idx) <= hedef:
+        return df
+    for bosluk in range(1, df.height + 1):
+        tut, son = [], -10**9
+        for i in idx:
+            if i - son >= bosluk:
+                tut.append(i)
+                son = i
+        if len(tut) <= hedef:
+            break
+    keep = pl.int_range(pl.len()).is_in(tut)
+    return df.with_columns(
+        [pl.when(keep).then(pl.col(c)).otherwise(None).alias(c) for c in cols]
+    )
+
+
 def make_chart(
     df: pl.DataFrame,
     trend: pl.DataFrame | None,
@@ -601,6 +631,12 @@ def render() -> None:
     )
     short_labels = label_style.startswith("Kisa")
 
+    yogunluk = st.sidebar.radio(
+        "Sinyal sayisi", ["Az (yaklasik 1/4)", "Hepsi"], horizontal=True,
+        help="Az: yakin sinyallerden yalniz biri gosterilir (hesap ve "
+             "tablo degismez).",
+    )
+
     badge_limit = st.sidebar.slider(
         "En fazla rozet", 0, 300, 300,
         help="0 = rozetleri kapat. Cakisanlar dikey kademeye ayrilir.",
@@ -699,27 +735,33 @@ def render() -> None:
     # Cevrim YALNIZCA gorunum icin. Hesap ve saklama UTC'de kaldi; 4H kova
     # hizalamasi (00/04/08/12/16/20 UTC) bu yuzden bozulmuyor.
     disp = out.with_columns(pl.col("ts").dt.convert_time_zone(tz))
+    disp_chart = (thin_signals(disp, 0.25) if yogunluk.startswith("Az")
+                  else disp)
     disp_trend = (trend.with_columns(pl.col("ts").dt.convert_time_zone(tz))
                   if trend is not None else None)
 
     st.plotly_chart(
-        make_chart(disp, disp_trend, colors, show_macd_panel, badge_limit,
+        make_chart(disp_chart, disp_trend, colors, show_macd_panel, badge_limit,
                    short_labels, timeframe, get_instrument(code).session),
         width="stretch",
         config={"scrollZoom": True, "displaylogo": False},
     )
-    n_sig_total = sig_rows.height + (
-        out.filter(pl.col("macd_cross").is_not_null()).height
-        if "macd_cross" in out.columns else 0
-    )
-    dense = badge_limit > 0 and n_sig_total > BADGE_DENSITY_LIMIT
+    def _say(d):
+        return d.filter(pl.col("signal").is_not_null()).height + (
+            d.filter(pl.col("macd_cross").is_not_null()).height
+            if "macd_cross" in d.columns else 0
+        )
+    n_sig_total = _say(disp)
+    n_sig_shown = _say(disp_chart)
+    dense = badge_limit > 0 and n_sig_shown > BADGE_DENSITY_LIMIT
     st.caption(
         "{} bar · {} - {} ({}) · {} sinyal · {}".format(
             "{:,}".format(out.height).replace(",", "."),
             disp["ts"][0].strftime("%d.%m.%Y %H:%M"),
             disp["ts"][-1].strftime("%d.%m.%Y %H:%M"),
             zone_label,
-            n_sig_total,
+            ("{} / {} (tablo: hepsi)".format(n_sig_shown, n_sig_total)
+             if n_sig_shown != n_sig_total else n_sig_total),
             "yogun gorunum: ucgen isaret (rozet icin daha kisa bir aralik "
             "secin)" if dense
             else "kucuk rozet = Chandelier, buyuk rozet = MACD",
