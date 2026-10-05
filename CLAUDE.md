@@ -26,7 +26,8 @@ Sıradaki karar kullanıcıda → `docs/STRATEJI_GECMISI.md`.
   `/baslat` ile. Komut satırı ayrıntısı anlatma.
 - Proje 29 Eylül 2026'da GitHub'a taşındı (git kurulu, dal `main`):
   https://github.com/gokhan2000/FinansCortex . Kullanıcı git komutlarını
-  bilmiyor → commit/push'u **yalnızca isterse** sen yap. `.gitignore` dışında
+  bilmiyor → değişikliği test et, sonra **her seferinde** `main`'e commit+push sen yap
+  (5 Ekim 2026'da kullanıcı onayladı; ayrıca izin sorma). `.gitignore` dışında
   tutulanlar: `data/`, `araclar/`, `yedek/`, `config/erisim.json`,
   `config/eposta.json`, `ADRES.txt` (gizli/büyük) — bunları asla ekleme.
   Büyük değişiklikten önce yine `yedek/`e kopya al (YEDEKLE.bat de sürüyor).
