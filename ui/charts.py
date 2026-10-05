@@ -53,6 +53,7 @@ TIMEFRAMES = {"15 dakika": "15m", "1 saat": "1h", "4 saat": "4h", "1 gun": "1d"}
 
 # Acilista yakin donem gelsin diye bar sayisi degil ZAMAN ARALIGI seciliyor.
 PERIODS = {
+    "Son 3 gun": 3,
     "Son 1 hafta": 7,
     "Son 2 hafta": 14,
     "Son 1 ay": 30,
@@ -63,12 +64,12 @@ PERIODS = {
 }
 # Varsayilan aralik ZAMAN DILIMINE gore degisir. Amac: her zaman diliminde
 # ilk bakista yakin donemi, okunabilir yogunlukta gostermek. 15dk'da 1 ay
-# ~2.000 bar ve ~60 sinyal demek -- rozetler ust uste biniyor. Ayni bar
+# ~2.000 bar ve ~60 sinyal demek (5 Ekim 2026: 15dk 3 gun, 4s 1 ay -> ~30 / ~17 sinyal) -- rozetler ust uste biniyor. Ayni bar
 # yogunlugunu her dilimde tutturmak icin aralik olceklendiriliyor.
 DEFAULT_PERIOD_BY_TF = {
-    "15m": "Son 1 ay",
+    "15m": "Son 3 gun",
     "1h": "Son 1 ay",
-    "4h": "Son 3 ay",
+    "4h": "Son 1 ay",
     "1d": "Son 1 yil",
 }
 
