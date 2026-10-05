@@ -272,6 +272,37 @@ def _rgba(hex_color: str, alpha: float) -> str:
     return "rgba({},{},{},{})".format(r, g, b, alpha)
 
 
+def _fmt_fiyat(v) -> str:
+    if v is None or v != v:
+        return "-"
+    return "{:,.5f}".format(float(v)).rstrip("0").rstrip(".")
+
+
+def sinyal_bilgisi(df: pl.DataFrame, i: int, macd: bool) -> str:
+    """Bir sinyalin uzerine gelince cikan ipucu metni (plotly HTML)."""
+    sig = df["macd_cross"][i] if macd else df["signal"][i]
+    al = sig == "BUY"
+    satirlar = [
+        "<b>{} {}</b>".format("MACD" if macd else "Chandelier",
+                              "AL" if al else "SAT"),
+        df["ts"][i].strftime("%d.%m.%Y %H:%M"),
+        "Kapanis: " + _fmt_fiyat(df["close"][i]),
+    ]
+    if macd:
+        if "macd" in df.columns:
+            satirlar.append("MACD: {} / sinyal: {}".format(
+                _fmt_fiyat(df["macd"][i]), _fmt_fiyat(df["macd_signal"][i])))
+        satirlar.append("MACD cizgisi sinyal cizgisini " +
+                        ("yukari" if al else "asagi") + " kesti")
+    else:
+        satirlar.append("ATR: " + _fmt_fiyat(df["atr"][i]))
+        stop = df["long_stop" if al else "short_stop"][i]
+        satirlar.append("Yeni stop: " + _fmt_fiyat(stop))
+        satirlar.append("Fiyat stopu " + ("yukari" if al else "asagi") +
+                        " kirdi, yon " + ("uzun" if al else "kisa") + "e dondu")
+    return "<br>".join(satirlar)
+
+
 def _build_badges(
     df: pl.DataFrame, colors: dict, limit: int, short: bool
 ) -> list[dict]:
@@ -365,6 +396,7 @@ def _build_badges(
             yshift=-shift if buy else shift,
             font=dict(size=size, color="#ffffff"),
             bgcolor=bg, bordercolor=base, borderwidth=1, borderpad=pad,
+            hovertext=sinyal_bilgisi(df, i, big), captureevents=True,
         ))
 
     return anns
@@ -481,10 +513,13 @@ def make_chart(
             ):
                 if col not in df.columns:
                     continue
-                s = df.filter(pl.col(col) == sig)
+                mask = (df[col] == sig).fill_null(False)
+                s = df.filter(mask)
                 if s.is_empty():
                     continue
                 buy = sig == "BUY"
+                ipucu = [sinyal_bilgisi(df, int(j), col == "macd_cross")
+                         for j in mask.arg_true().to_list()]
                 fig.add_trace(
                     go.Scatter(
                         x=s["ts"].to_list(),
@@ -494,7 +529,7 @@ def make_chart(
                         marker=dict(symbol=symbol, size=size, color=color,
                                     line=dict(width=1,
                                               color=colors["surface"])),
-                        hovertemplate=label + "<extra></extra>",
+                        text=ipucu, hovertemplate="%{text}<extra></extra>",
                     ),
                     row=1, col=1,
                 )
