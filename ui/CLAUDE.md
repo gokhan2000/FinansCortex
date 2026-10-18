@@ -291,6 +291,24 @@ en iyi/en kötü ara durum (girişe göre %), süre, çıkış nedeni, kâr/zara
 kazanç/kayıp, kâr faktörü, üst üste kayıp, en iyi/en kötü. Doğrulandı: 3
 strateji AppTest ile hatasız.
 
+### Sinyal tablosu: rapor + ortak stop-loss (18 Ekim 2026)
+
+Kullanıcı: *"bütün stratejilere dinamik stop-loss (yüzde / miktar / fiyat
+seviyesi); tablonun altına yorum yapabileyim diye rapor; önerileri sonra
+tekrar ver."* **Ortak katman `src/finans_cortex/stoploss.py`** — motorlara
+DOKUNMAZ, motorun işlem listesinin üstüne biner (bar içi seviyeden, boşlukta
+açılıştan, giriş barı hariç, aynı barda motor çıkışı da varsa stop kazanır).
+Kullanıcı arayüzü `strategies.stop_widgets()`; Backtest panelinde (tek + canlı
+ayar + tüm varlıklar karşılaştırması; canlı ayarda "başlangıç" referansı stop'suz
+kalır) ve Sinyal tablosunda var. Kural akışı ve Geliştir stop'u uygulamaz.
+Stop kapalıyken sonuç motorunkiyle birebir aynıdır. Doğrulandı: stop'lanan
+işlemlerin çıkışı seviyeden iyi değil (0 ihlal), çıkış < giriş 0.
+Rapor (`sinyal_tablosu.rapor`): genel, yön, çıkış nedeni, işlem içi seyir
+(MFE/MAE), % stop etüdü (0,5…5), kural tabanlı numaralı öneriler; .txt indirilir.
+Öneriler kural tabanlıdır (yorum değil) ve küçük örneklemde bunu söyler.
+**Bulunan eski hata:** Strateji 1'in canlı ayar modu `bars_15m` yüzünden
+çöküyordu (`run_bars` bu alanı almıyor); yalnız teyit gerekiyorsa verilir.
+
 ## Geliştir sekmesi (22 Eylül 2026)
 
 Kullanıcı: *"kazandırma oranını artırmaya yönelik fikirler veren bir motor...

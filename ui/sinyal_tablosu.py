@@ -7,11 +7,16 @@ min/max yalniz o islemin baslangic-bitis aralindaki barlardan okunur.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
+import polars as pl
 import streamlit as st
 
+from finans_cortex import stoploss
+
 from . import akis, theme
+from .strategies import stop_widgets
 
 TZ = akis.TZ
 ADETLER = (10, 20, 30, 50)
@@ -28,13 +33,14 @@ def _yz(v: float) -> str:
                               abs(v)).replace(".", ",")
 
 
-def _satirlar(res, adet: int, kapital: float, kaldirac: float) -> list[dict]:
+def _satirlar(res, trades: pl.DataFrame, kapital: float,
+              kaldirac: float) -> list[dict]:
     bars = res.bars
     ts = bars["ts"]
     son_kapanis = float(bars["close"][-1])
     tz = ZoneInfo(TZ)
     satirlar = []
-    for t in reversed(res.trades.tail(adet).to_dicts()):
+    for t in reversed(trades.to_dicts()):
         d = t["yon"]
         g = t["giris"]
         acik = t["neden"] == "veri_sonu"
@@ -126,6 +132,176 @@ def _tablo(satirlar: list[dict]) -> str:
             h=h, b="".join(govde)))
 
 
+STOP_BASAMAK = (0.5, 1.0, 1.5, 2.0, 3.0, 5.0)
+
+
+def _stop_etudu(res, ham: pl.DataFrame, kapital: float,
+                kaldirac: float) -> list[tuple[float, float, int]]:
+    """Ayni islemlere % stop konsaydi: (stop %, net $, stoplanan islem)."""
+    sonuc = []
+    for p in STOP_BASAMAK:
+        yeni = stoploss.trades_uygula(
+            ham, res.bars, stoploss.StopAyar(stoploss.YUZDE, p), res.cost_bp)
+        net = float(yeni["getiri"].sum()) * kapital * kaldirac
+        sonuc.append((p, net, int((yeni["neden"] == stoploss.NEDEN).sum())))
+    return sonuc
+
+
+def _ort(x: list[float]) -> float:
+    return sum(x) / len(x) if x else 0.0
+
+
+def _say(v: float) -> str:
+    return "{:g}".format(v).replace(".", ",")
+
+
+def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
+          kaldirac: float, kod: str, ad: str, tf_label: str) -> tuple[str, str]:
+    """(ekranda gosterilecek markdown, indirilecek metin) -- ikisi ayni.
+
+    `ham`: stop-loss UYGULANMAMIS son N islem (etut buna konur);
+    `satirlar`: kullanicinin sectigi stop ile gosterilen islemler."""
+    kapali = [s for s in satirlar if not s["acik"]]
+    n = len(kapali)
+    if n == 0:
+        return ("Kapanmis islem yok; rapor icin en az bir kapanmis islem "
+                "gerekir.", "")
+    kaz = [s for s in kapali if s["getiri"] > 0]
+    kay = [s for s in kapali if s["getiri"] <= 0]
+    ort_kaz = _ort([s["getiri"] * 100 for s in kaz])
+    ort_kay = _ort([s["getiri"] * 100 for s in kay])
+    oran = len(kaz) / n
+    beklenti = _ort([s["getiri"] * 100 for s in kapali])
+    toplam = sum(s["tutar"] for s in satirlar)
+    baslabas = (abs(ort_kay) / (ort_kaz + abs(ort_kay)) if kaz and kay
+                else float("nan"))
+    sure_kaz = _ort([s["sure"].total_seconds() for s in kaz])
+    sure_kay = _ort([s["sure"].total_seconds() for s in kay])
+
+    def yon_satiri(yon: int, ad_: str) -> str:
+        x = [s for s in kapali if s["yon"] == yon]
+        if not x:
+            return "- {}: islem yok".format(ad_)
+        return "- {}: {} islem, kazanma %{:.0f}, net {}, ort. {}".format(
+            ad_, len(x), 100 * sum(1 for s in x if s["getiri"] > 0) / len(x),
+            _tl(sum(s["tutar"] for s in x)),
+            _yz(_ort([s["getiri"] * 100 for s in x])))
+
+    nedenler: dict[str, list[float]] = {}
+    for s in kapali:
+        nedenler.setdefault(s["neden"], []).append(s["getiri"] * 100)
+    neden_satir = ["- {}: {} islem, ort. {}".format(k, len(v), _yz(_ort(v)))
+                   for k, v in sorted(nedenler.items(),
+                                      key=lambda kv: -len(kv[1]))]
+
+    kay_mae = _ort([s["mae"] for s in kay])
+    kaz_mae = _ort([s["mae"] for s in kaz])
+    kaz_mfe = _ort([s["mfe"] for s in kaz])
+    kay_once_kar = [s for s in kay if s["mfe"] >= 0.5]
+    geri_verilen = _ort([s["mfe"] - s["getiri"] * 100 for s in kaz])
+
+    etut = _stop_etudu(res, ham, kapital, kaldirac)
+    temel_net = float(ham["getiri"].sum()) * kapital * kaldirac
+    en_iyi = max(etut, key=lambda r: r[1])
+    etut_satir = ["| Stop | Net $ | Fark | Stoplanan islem |",
+                  "|---|---|---|---|"]
+    for p, net, k in etut:
+        etut_satir.append("| %{} | {} | {} | {} |".format(
+            _say(p), _tl(net), _tl(net - temel_net), k))
+
+    seri = en_uzun = 0
+    for s in reversed(satirlar):
+        seri = seri + 1 if s["getiri"] <= 0 else 0
+        en_uzun = max(en_uzun, seri)
+
+    oneri = []
+    if n < 30:
+        oneri.append("Orneklem kucuk ({} kapanmis islem): sonuclar yon "
+                     "gosterir, kanit sayilmaz; 50 sinyale cikarip "
+                     "bakin.".format(n))
+    if beklenti <= 0:
+        oneri.append("Islem basina beklenti negatif ({}): bu donemde strateji "
+                     "maliyeti cikaramiyor.".format(_yz(beklenti)))
+    if baslabas == baslabas and oran < baslabas:
+        oneri.append("Kazanma orani (%{:.0f}) basabas oraninin (%{:.0f}) "
+                     "altinda: kazananlari daha uzun tasimak ya da "
+                     "kaybedenleri daha erken kesmek gerekir.".format(
+                         100 * oran, 100 * baslabas))
+    for yon, ad_ in ((1, "AL"), (-1, "SAT")):
+        x = [s for s in kapali if s["yon"] == yon]
+        net_x = sum(s["tutar"] for s in x)
+        if len(x) >= 5 and net_x < 0:
+            oneri.append("{} islemleri toplamda zarar yazdi ({}): {} tarafini "
+                         "kapatmayi ya da o yone ayri kural koymayi "
+                         "deneyin.".format(ad_, _tl(net_x), ad_))
+    if en_iyi[1] > temel_net:
+        oneri.append("Bu {} islemde %{} stop-loss net sonucu {} -> {} "
+                     "yapardi (stop-loss kutusundan deneyin).".format(
+                         len(ham), _say(en_iyi[0]), _tl(temel_net),
+                         _tl(en_iyi[1])))
+    else:
+        oneri.append("Denenen sabit % stoplarin hicbiri sonucu "
+                     "iyilestirmedi: kayiplar zaten strateji cikisiyla "
+                     "kapaniyor ya da stop kazananlari da kesiyor.")
+    if kay and len(kay_once_kar) / len(kay) >= 0.4:
+        oneri.append("Kaybeden islemlerin %{:.0f}'i once en az %0,5 karda "
+                     "gitti: kar al ya da kari kilitleyen (iz suren) stop "
+                     "dusunulebilir.".format(100 * len(kay_once_kar) / len(kay)))
+    if kaz and kaz_mfe > 0 and geri_verilen / kaz_mfe > 0.5:
+        oneri.append("Kazananlar zirvedeki kari ortalama {} geri veriyor "
+                     "(zirve {}): cikis gec kaliyor olabilir.".format(
+                         _yz(geri_verilen), _yz(kaz_mfe)))
+    if en_uzun >= 4:
+        oneri.append("{} islemlik ust uste kayip serisi var: pozisyon "
+                     "buyuklugu ya da seri sonrasi bekleme kurali "
+                     "dusunulebilir.".format(en_uzun))
+    if sure_kaz > 0 and sure_kay > 2 * sure_kaz:
+        oneri.append("Kaybedenler kazananlardan {} kat uzun tutuluyor: zaman "
+                     "stopu (N bar sonra kar yoksa cik) denenebilir.".format(
+                         _say(round(sure_kay / sure_kaz, 1))))
+    if not oneri:
+        oneri.append("Belirgin bir zayiflik yakalanmadi; asil karar icin "
+                     "Backtest'te daha uzun donem ve tum varliklara bakin.")
+
+    md = "\n".join([
+        "#### Rapor · {} · {} · {} · son {} sinyal".format(
+            kod, ad, tf_label, len(satirlar)),
+        "",
+        "**Genel**",
+        "- Kapanmis {} islem (+{} acik): {} kazanan, {} kaybeden, kazanma "
+        "%{:.0f}".format(n, len(satirlar) - n, len(kaz), len(kay), 100 * oran),
+        "- Ort. kazanc {} / ort. kayip {} · basabas kazanma orani {}".format(
+            _yz(ort_kaz), _yz(ort_kay),
+            "%{:.0f}".format(100 * baslabas) if baslabas == baslabas else "-"),
+        "- Islem basina beklenti {} · net {} (kapital {}, kaldirac {}x)".format(
+            _yz(beklenti), _tl(toplam), _tl(kapital)[1:], _say(kaldirac)),
+        "- Ort. sure: kazanan {} · kaybeden {}".format(
+            akis._sure(timedelta(seconds=sure_kaz)),
+            akis._sure(timedelta(seconds=sure_kay))),
+        "- En uzun ust uste kayip: {}".format(en_uzun),
+        "",
+        "**Yon**", yon_satiri(1, "AL"), yon_satiri(-1, "SAT"),
+        "",
+        "**Cikis nedenleri**", *neden_satir,
+        "",
+        "**Islem ici seyir (girise gore)**",
+        "- Kazananlar: en kotu {} · en iyi {} · gercek sonuc {}".format(
+            _yz(kaz_mae), _yz(kaz_mfe), _yz(ort_kaz)),
+        "- Kaybedenler: en kotu {} · gercek sonuc {}".format(
+            _yz(kay_mae), _yz(ort_kay)),
+        "",
+        "**Stop-loss etudu** (ayni {} islem; yalniz sabit % stop eklenseydi. "
+        "Stop yokken net {})".format(len(ham), _tl(temel_net)),
+        "",
+        *etut_satir,
+        "",
+        "**Oneriler** (kural tabanli; karar sizin)",
+        "",
+        *["{}. {}".format(i + 1, o) for i, o in enumerate(oneri)],
+    ])
+    return md, md.replace("#### ", "").replace("**", "")
+
+
 def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
     """Stratejiler > <strateji> > Sinyal tablosu bolumu."""
     from finans_cortex.instruments import INSTRUMENTS
@@ -139,6 +315,7 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
                                   step=100.0, key="st_kapital")
     kaldirac = ust[3].number_input("Kaldirac (x)", min_value=1.0, value=1.0,
                                    step=1.0, key="st_kaldirac")
+    stop = stop_widgets("st_stop")
     try:
         res = akis._sonuc(strat["temel"], code, timeframe, cfg)
     except Exception as exc:      # noqa: BLE001 -- kullaniciya gosterilir
@@ -148,10 +325,20 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
         st.info("{} icin son {} gunde bu ayarlarla sinyal yok.".format(
             code, akis.GUN.get(timeframe, 180)))
         return
-    satirlar = _satirlar(res, adet, kapital, kaldirac)
+    ham = res.trades.tail(adet)
+    trades = stoploss.trades_uygula(ham, res.bars, stop, res.cost_bp)
+    satirlar = _satirlar(res, trades, kapital, kaldirac)
     ust[4].caption(
         "Son {} sinyal · {} · maliyet dahil · her islemde ayni kapital. "
         "En dusuk/en yuksek = islem suresince goren fiyat; en iyi/en kotu "
         "ara = girisinize gore.".format(len(satirlar), tf_label))
     _ozet(satirlar)
     st.markdown(_tablo(satirlar), unsafe_allow_html=True)
+    st.markdown("---")
+    md, metin = rapor(res, ham, satirlar, kapital, kaldirac, code,
+                      strat.get("ad", ""), tf_label)
+    st.markdown(md)
+    if metin:
+        st.download_button("Raporu indir (.txt)", metin,
+                           file_name="sinyal_raporu_{}.txt".format(code),
+                           key="st_indir")

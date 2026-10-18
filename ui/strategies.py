@@ -523,6 +523,39 @@ def keep_section(key: str, fallback: str) -> None:
         st.session_state[key] = st.session_state.get("_son_" + key, fallback)
 
 
+def stop_widgets(key: str) -> "stoploss.StopAyar":
+    """Ortak (dinamik) stop-loss denetimi -- her strateji icin ayni.
+
+    Motorun kendi cikislarinin USTUNE biner (bkz. finans_cortex/stoploss.py).
+    Kapaliyken sonuc motorun verdigiyle birebir ayni kalir."""
+    from finans_cortex import stoploss
+
+    c = st.columns([1.2, 1, 3], gap="small", vertical_alignment="bottom")
+    ad = c[0].selectbox(
+        "Stop-loss", list(stoploss.MODLAR), key=key + "_mod",
+        help="Yuzde: girisin %X'i kadar ters yonde. Miktar: giristen X fiyat "
+             "birimi (ornegin altinda 30). Fiyat seviyesi: fiyat X'e dusunce "
+             "(SAT'ta X'e cikinca) -- seviye girisin ters tarafinda degilse "
+             "o islemde yok sayilir.")
+    mod = stoploss.MODLAR[ad]
+    if mod == stoploss.KAPALI:
+        c[2].caption("Kapali: strateji kendi cikis kurallariyla calisir.")
+        return stoploss.StopAyar()
+    adim = {stoploss.YUZDE: 0.25, stoploss.PUAN: 1.0, stoploss.SEVIYE: 1.0}[mod]
+    varsayilan = {stoploss.YUZDE: 1.0, stoploss.PUAN: 10.0,
+                  stoploss.SEVIYE: 100.0}[mod]
+    etiket = {stoploss.YUZDE: "Zarar %", stoploss.PUAN: "Miktar",
+              stoploss.SEVIYE: "Seviye"}[mod]
+    deger = c[1].number_input(etiket, min_value=0.0, value=varsayilan,
+                              step=adim, format="%g", key=key + "_" + mod)
+    ayar = stoploss.StopAyar(mod, float(deger))
+    c[2].caption("Aktif: {}. Bar icinde seviyeye dokunursa o seviyeden, "
+                 "bosluklu acilirsa acilistan cikar; giris bari haric. "
+                 "Ayni barda motorun cikisi da varsa stop kazanir "
+                 "(kotumser).".format(stoploss.aciklama(ayar)))
+    return ayar
+
+
 def param_widgets(
     strat_or_cfg=None,
     defaults=None,
