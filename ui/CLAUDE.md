@@ -49,6 +49,7 @@ strategies.py   Stratejiler: liste → özet → menü (Sinyaller, BIST 30, Back
 backtest.py     ORTAK backtest paneli: Backtest menüsü + Stratejiler > Backtest
                 (Tek backtest | Canlı parametre ayarı + Farklı kaydet)
 akis.py         Kural akışı ekranı: SVG şema + mum grafiği, eş zamanlı animasyon
+sinyal_tablosu.py  Sinyal tablosu: son 10-50 AL/SAT sinyali tek tabloda
 gelistir.py     Geliştir ekranı: teşhis (zayıf nokta kartları) + parametre
                 taraması + "bunu dene" karşılaştırması (hesap src/gelistir.py'de)
 auth.py         Parola kapısı (yalnız uzaktan erişimde devrede)
@@ -277,6 +278,18 @@ bir sinyalde kurallar nasıl işlemiş animasyonlu görmek istiyorum"*, ve *"ak�
   `currentTime` elle sarılır.
 
 ---
+
+## Sinyal tablosu sekmesi (18 Ekim 2026)
+
+Kullanıcı: *"kural akışının aynısı bir sekme; yalnız varlık combosu kalsın,
+altında son al/sat sinyallerinin tablosu: başlangıç fiyatı, son fiyat,
+min/max, kâr-zarar yüzdesi ve miktarı; son 10-20 hareket."* `ui/sinyal_tablosu.py`,
+sinyal kaynağı kural akışıyla aynı (`akis._sonuc`). Sütunlar: giriş (TR), yön,
+başlangıç, son fiyat (açıkta son kapanış), en düşük/en yüksek (işlem süresince),
+en iyi/en kötü ara durum (girişe göre %), süre, çıkış nedeni, kâr/zarar % ve $
+(kapital × kaldıraç, maliyet dahil). Üstte özet: net, kazanma oranı, ort.
+kazanç/kayıp, kâr faktörü, üst üste kayıp, en iyi/en kötü. Doğrulandı: 3
+strateji AppTest ile hatasız.
 
 ## Geliştir sekmesi (22 Eylül 2026)
 

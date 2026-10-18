@@ -56,6 +56,7 @@ SECTIONS = {
     "Backtest": "backtest",
     "Kurallar": "kurallar",
     "Kural akisi": "akis",
+    "Sinyal tablosu": "sinyaltablo",
     "Gelistir": "gelistir",
 }
 
@@ -174,7 +175,7 @@ BASE = {
         renk="violet", motor=ema, cfg=ema.EmaConfig(), timeframe="15m",
         zamanlar=TF_15M_1H,
         bolumler=("Ozet", "Sinyaller", "BIST 30", "Backtest", "Kurallar",
-                  "Kural akisi", "Gelistir"),
+                  "Kural akisi", "Sinyal tablosu", "Gelistir"),
         kurallar=RULES_EMA,
         egriler=(("ema", "EMA", "yellow"),),
         isaretler=(("kurulum", "EMA kurulumu", "magenta"),),
@@ -198,7 +199,7 @@ BASE = {
         renk="aqua", motor=heikin, cfg=heikin.HeikinConfig(), timeframe="4h",
         zamanlar=TF_SWING,
         bolumler=("Ozet", "Sinyaller", "Backtest", "Kurallar", "Kural akisi",
-                  "Gelistir"),
+                  "Sinyal tablosu", "Gelistir"),
         kurallar=RULES_HEIKIN,
         egriler=(("filt", "Range filtresi", "yellow"),
                  ("ha_close", "Heikin Ashi kapanis", "blue")),
@@ -224,7 +225,7 @@ BASE = {
         cfg=heikin.HeikinConfig(rf_kullan=False), timeframe="4h",
         zamanlar=TF_SWING,
         bolumler=("Ozet", "Sinyaller", "Backtest", "Kurallar", "Kural akisi",
-                  "Gelistir"),
+                  "Sinyal tablosu", "Gelistir"),
         kurallar=RULES_CE_ONLY,
         egriler=(("ha_close", "Heikin Ashi kapanis", "blue"),),
         isaretler=(("ce_sig", "Chandelier", "orange"),),
@@ -749,6 +750,9 @@ def _strategy_page(strat: dict) -> None:
         st.caption(kaynak)
         st.markdown(base["kurallar"])
         _params_table(strat)
+    elif sel == "Sinyal tablosu":
+        from . import sinyal_tablosu       # gec import (ayni sebep)
+        sinyal_tablosu.render(strat, cfg, timeframe, tf_label)
     elif sel == "Kural akisi":
         # Gec import: akis modulu buradan motor() aliyor (dongusel import).
         from . import akis as akis_ekrani
