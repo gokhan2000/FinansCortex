@@ -307,6 +307,7 @@ Rapor (`sinyal_tablosu.rapor`): genel, yön, çıkış nedeni, işlem içi seyir
 (MFE/MAE), % stop etüdü (0,5…5), kural tabanlı numaralı öneriler; .txt indirilir.
 Öneriler kural tabanlıdır (yorum değil) ve küçük örneklemde bunu söyler.
 **Kar al (18 Ekim 2026):** aynı katman, aynı üç mod, lehte yönde; sıra kötümser (önce stop, sonra kar al; aynı barda ikisi → zarar). Rapora kar al etüdü ve stop × kar al matrisi (net $) eklendi. Matris aynı işlemlerden seçim yaptığı için iyimsern; rapor bunu söyler.
+**BIST 30 (18 Ekim 2026):** Sinyal tablosunda Piyasa seçici (Küresel / BIST 30). BIST'te zaman dilimi stratejinin dilimleri ∩ {1g, 1sa}, maliyet `bist_cost_for` (20 bp), 15dk teyidi kapalı çalışır (ekranda yazar), para birimi ₺. Rapor markdown'ında `$` işaretleri LaTeX sanılıyordu → küreselde `\$` ile kaçırılır.
 **Bulunan eski hata:** Strateji 1'in canlı ayar modu `bars_15m` yüzünden
 çöküyordu (`run_bars` bu alanı almıyor); yalnız teyit gerekiyorsa verilir.
 

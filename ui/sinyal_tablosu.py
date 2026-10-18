@@ -65,7 +65,7 @@ def _satirlar(res, trades: pl.DataFrame, kapital: float,
     return satirlar
 
 
-def _ozet(satirlar: list[dict]) -> None:
+def _ozet(satirlar: list[dict], pb: str = "$") -> None:
     kapali = [s for s in satirlar if not s["acik"]] or satirlar
     kaz = [s for s in kapali if s["getiri"] > 0]
     kay = [s for s in kapali if s["getiri"] <= 0]
@@ -79,7 +79,7 @@ def _ozet(satirlar: list[dict]) -> None:
     ort_k = _yz(sum(s["getiri"] for s in kaz) * 100 / len(kaz)) if kaz else "-"
     ort_z = _yz(sum(s["getiri"] for s in kay) * 100 / len(kay)) if kay else "-"
     c = st.columns(6)
-    c[0].metric("Net", _tl(toplam))
+    c[0].metric("Net", _tl(toplam).replace("$", pb))
     c[1].metric("Kazanma orani", "%{:.0f}".format(100 * len(kaz) / len(kapali)))
     c[2].metric("Ort. kazanc / kayip", "{} / {}".format(ort_k, ort_z))
     c[3].metric("Kar faktoru", "{:.2f}".format(kar / zarar).replace(".", ",")
@@ -372,23 +372,70 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
     return md, md.replace("#### ", "").replace("**", "")
 
 
+@st.cache_resource(ttl=600, max_entries=16, show_spinner=False)
+def _bist_sonuc(temel: str, code: str, timeframe: str, cfg):
+    """BIST hissesi icin gecmis calistirma (ayri tablo, 20 bp maliyet)."""
+    from finans_cortex import backtest as bt_cost
+
+    from .backtest import _raw_bars
+    from .strategies import motor
+    return motor(temel).run_bars(
+        _raw_bars(code, timeframe, "bist"), code, timeframe, cfg,
+        days=akis.GUN.get(timeframe, 180),
+        cost_bp=bt_cost.bist_cost_for(code).roundtrip_bp)
+
+
 def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
     """Stratejiler > <strateji> > Sinyal tablosu bolumu."""
-    from finans_cortex.instruments import INSTRUMENTS
+    from dataclasses import replace
 
-    ust = st.columns([1, 0.8, 0.8, 0.8, 2], gap="small",
+    from finans_cortex.instruments import HESAP_KODLARI
+
+    from .backtest import BIST_TF, PIYASALAR, _kodlar
+    from .strategies import timeframes
+
+    ust = st.columns([1, 1, 0.9, 0.8, 0.8, 0.8], gap="small",
                      vertical_alignment="bottom")
-    code = ust[0].selectbox("Varlik", [i.code for i in INSTRUMENTS], index=1,
-                            key="st_varlik")
-    adet = ust[1].selectbox("Son kac sinyal", ADETLER, index=1, key="st_adet")
-    kapital = ust[2].number_input("Kapital ($)", min_value=10.0, value=1000.0,
-                                  step=100.0, key="st_kapital")
-    kaldirac = ust[3].number_input("Kaldirac (x)", min_value=1.0, value=1.0,
+    piyasa = PIYASALAR[ust[0].selectbox("Piyasa", list(PIYASALAR),
+                                        key="st_piyasa")]
+    bist = piyasa == "bist"
+    kodlar = _kodlar(piyasa) if bist else list(HESAP_KODLARI)
+    if not kodlar:
+        st.info("BIST gecmisi henuz indirilmedi. **Veri Merkezi > BIST "
+                "gecmisini guncelle**'ye bir kez basin.")
+        return
+    tf_not = ""
+    if bist:
+        # Backtest panelindeki kural: stratejinin dilimleri ∩ BIST'te olanlar.
+        uygun = {lbl: kod for lbl, kod in timeframes(strat).items()
+                 if kod in BIST_TF}
+        if not uygun:
+            st.warning("**{}** BIST'te calistirilamiyor: bu strateji {} "
+                       "diliminde calisiyor, BIST'te yalniz gunluk ve 1 saat "
+                       "var.".format(strat["ad"], " / ".join(timeframes(strat))))
+            return
+        tf_label = ust[2].selectbox("Zaman dilimi", list(uygun),
+                                    key="st_bist_tf_" + strat["key"])
+        timeframe = uygun[tf_label]
+        if getattr(cfg, "onay_15m", False):
+            cfg = replace(cfg, onay_15m=False)
+            tf_not = " · BIST'te 15dk teyidi yok, kapali calisti"
+    else:
+        ust[2].caption("Zaman dilimi: **{}**".format(tf_label))
+    code = ust[1].selectbox("Hisse" if bist else "Varlik", kodlar,
+                            index=min(1, len(kodlar) - 1),
+                            key="st_hisse" if bist else "st_varlik")
+    pb = "₺" if bist else "$"
+    adet = ust[3].selectbox("Son kac sinyal", ADETLER, index=1, key="st_adet")
+    kapital = ust[4].number_input("Kapital ({})".format(pb), min_value=10.0,
+                                  value=1000.0, step=100.0, key="st_kapital")
+    kaldirac = ust[5].number_input("Kaldirac (x)", min_value=1.0, value=1.0,
                                    step=1.0, key="st_kaldirac")
     stop = stop_widgets("st_stop")
     kar = stop_widgets("st_kar", kar=True)
     try:
-        res = akis._sonuc(strat["temel"], code, timeframe, cfg)
+        res = (_bist_sonuc(strat["temel"], code, timeframe, cfg) if bist
+               else akis._sonuc(strat["temel"], code, timeframe, cfg))
     except Exception as exc:      # noqa: BLE001 -- kullaniciya gosterilir
         st.error("Sinyaller hesaplanamadi: {}".format(exc))
         return
@@ -399,15 +446,20 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
     ham = res.trades.tail(adet)
     trades = stoploss.trades_uygula(ham, res.bars, stop, res.cost_bp, kar)
     satirlar = _satirlar(res, trades, kapital, kaldirac)
-    ust[4].caption(
-        "Son {} sinyal · {} · maliyet dahil · her islemde ayni kapital. "
-        "En dusuk/en yuksek = islem suresince goren fiyat; en iyi/en kotu "
-        "ara = girisinize gore.".format(len(satirlar), tf_label))
-    _ozet(satirlar)
-    st.markdown(_tablo(satirlar), unsafe_allow_html=True)
+    st.caption(
+        "Son {} sinyal · {} · maliyet dahil ({} bp gidis-donus) · her "
+        "islemde ayni kapital · en dusuk/en yuksek = islem suresince goren "
+        "fiyat; en iyi/en kotu ara = girisinize gore{}".format(
+            len(satirlar), tf_label, _say(res.cost_bp), tf_not))
+    _ozet(satirlar, pb)
+    st.markdown(_tablo(satirlar).replace("$", pb), unsafe_allow_html=True)
     st.markdown("---")
     md, metin = rapor(res, ham, satirlar, kapital, kaldirac, code,
                       strat.get("ad", ""), tf_label)
+    if bist:
+        md, metin = md.replace("$", pb), metin.replace("$", pb)
+    else:
+        md = md.replace("$", "\\$")      # Streamlit $...$ = LaTeX sanmasin
     st.markdown(md)
     if metin:
         st.download_button("Raporu indir (.txt)", metin,
