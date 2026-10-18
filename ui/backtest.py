@@ -111,7 +111,8 @@ def _kodlar(piyasa: str) -> list[str]:
 
 @st.cache_data(ttl=600, show_spinner=False)
 def _run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
-         piyasa: str = "kuresel", stop: stoploss.StopAyar = stoploss.StopAyar()):
+         piyasa: str = "kuresel", stop: stoploss.StopAyar = stoploss.StopAyar(),
+         kar: stoploss.StopAyar = stoploss.StopAyar()):
     s, e = _utc_range(start, end)
     if piyasa == "bist":
         res = motor(temel).run_bars(
@@ -120,7 +121,7 @@ def _run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
     else:
         res = motor(temel).run(charts.get_connection(), code, timeframe, cfg,
                                start=s, end=e)
-    return stoploss.uygula(res, stop, motor(temel))
+    return stoploss.uygula(res, stop, motor(temel), kar)
 
 
 @st.cache_resource(ttl=600, max_entries=8, show_spinner=False)
@@ -134,7 +135,8 @@ def _raw_bars(code: str, timeframe: str, piyasa: str = "kuresel") -> pl.DataFram
 @st.cache_resource(ttl=600, max_entries=64, show_spinner=False)
 def _lab_run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
              piyasa: str = "kuresel",
-             stop: stoploss.StopAyar = stoploss.StopAyar()):
+             stop: stoploss.StopAyar = stoploss.StopAyar(),
+             kar: stoploss.StopAyar = stoploss.StopAyar()):
     s, e = _utc_range(start, end)
     # 15 dakikalik teyit acikken (Strateji 2 onay_15m) ikinci cerceve gerekir.
     # Kapaliyken okunmaz -- panel eskisi kadar hizli kalir. BIST'te 15 dakikalik
@@ -146,7 +148,7 @@ def _lab_run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
     res = motor(temel).run_bars(_raw_bars(code, timeframe, piyasa), code,
                                 timeframe, cfg, start=s, end=e, cost_bp=maliyet,
                                 **({"bars_15m": ek} if ek is not None else {}))
-    return stoploss.uygula(res, stop, motor(temel))
+    return stoploss.uygula(res, stop, motor(temel), kar)
 
 
 def _bounds(code: str, piyasa: str = "kuresel",
@@ -258,10 +260,11 @@ def panel(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
         return
 
     stop = stop_widgets("bt_stop")
+    kar = stop_widgets("bt_kar", kar=True)
     if mode == MODES[1]:
         st.caption("{} verisi: {} - {} · zaman dilimi kenar cubugunda".format(
             code, first.strftime("%d.%m.%Y"), last.strftime("%d.%m.%Y")))
-        _lab(strat, timeframe, tf_label, code, d1, d2, piyasa, stop)
+        _lab(strat, timeframe, tf_label, code, d1, d2, piyasa, stop, kar)
         return
 
     c = st.columns([1, 3])
@@ -270,7 +273,8 @@ def panel(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
                  "kenar cubugunda".format(code, first.strftime("%d.%m.%Y"),
                                           last.strftime("%d.%m.%Y")))
 
-    request = (strat["temel"], code, timeframe, d1, d2, cfg, piyasa, stop)
+    request = (strat["temel"], code, timeframe, d1, d2, cfg, piyasa, stop,
+               kar)
     if clicked:
         with st.spinner("Backtest calisiyor..."):
             _run(*request)
@@ -292,7 +296,7 @@ def panel(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
             "**Canli parametre ayari**'ni secin.")
         return
 
-    (r_temel, r_code, r_tf, r_d1, r_d2, r_cfg, r_piyasa, r_stop), r_strat, r_tf_label = done
+    (r_temel, r_code, r_tf, r_d1, r_d2, r_cfg, r_piyasa, r_stop, r_kar), r_strat, r_tf_label = done
     if done[0] != request:
         st.warning("Ayarlar degisti; asagidaki sonuc **onceki ayarlara** ait. "
                    "Guncellemek icin **Backtest'i calistir**.")
@@ -322,7 +326,8 @@ def panel(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
                    "hic satmamak.")
         _pnl_bars(res)
     with tabs[4]:
-        _section_compare(r_temel, r_tf, r_d1, r_d2, r_cfg, span, r_piyasa, r_stop)
+        _section_compare(r_temel, r_tf, r_d1, r_d2, r_cfg, span, r_piyasa, r_stop,
+                         r_kar)
 
 
 # ==========================================================================
@@ -336,7 +341,8 @@ def _reset_widgets(prefix: str, temel: str) -> None:
 @st.fragment
 def _lab(strat: dict, timeframe: str, tf_label: str, code: str,
          d1: date, d2: date, piyasa: str = "kuresel",
-         stop: stoploss.StopAyar = stoploss.StopAyar()) -> None:
+         stop: stoploss.StopAyar = stoploss.StopAyar(),
+         kar: stoploss.StopAyar = stoploss.StopAyar()) -> None:
     prefix = "lab_" + strat["key"]
     left, right = st.columns([1, 2.6], gap="large")
     with left:
@@ -354,7 +360,8 @@ def _lab(strat: dict, timeframe: str, tf_label: str, code: str,
 
     temel = strat["temel"]
     t0 = perf_counter()
-    cur = _lab_run(temel, code, timeframe, d1, d2, cfg, piyasa, stop)
+    cur = _lab_run(temel, code, timeframe, d1, d2, cfg, piyasa, stop,
+                   kar)
     ref = _lab_run(temel, code, timeframe, d1, d2, strat["cfg"], piyasa)
     secs = perf_counter() - t0
 
@@ -615,7 +622,8 @@ def _section_chart(res, code: str, katmanlar=((), ()), piyasa: str = "kuresel") 
 
 def _section_compare(temel: str, timeframe: str, d1: date, d2: date,
                      cfg, span: str, piyasa: str = "kuresel",
-                     stop: stoploss.StopAyar = stoploss.StopAyar()) -> None:
+                     stop: stoploss.StopAyar = stoploss.StopAyar(),
+                     kar: stoploss.StopAyar = stoploss.StopAyar()) -> None:
     kodlar = _kodlar(piyasa)
     st.markdown("**Ayni ayarlarla tum varliklar** · {}".format(span))
     if not st.button("Tum varliklarda calistir"):
@@ -625,7 +633,7 @@ def _section_compare(temel: str, timeframe: str, d1: date, d2: date,
     rows = []
     bar = st.progress(0.0, text="Varliklar hesaplaniyor...")
     for n, kod in enumerate(kodlar):
-        r = _run(temel, kod, timeframe, d1, d2, cfg, piyasa, stop).metrics
+        r = _run(temel, kod, timeframe, d1, d2, cfg, piyasa, stop, kar).metrics
         if r:
             rows.append({
                 "Varlik": kod, "Islem": r["islem"],

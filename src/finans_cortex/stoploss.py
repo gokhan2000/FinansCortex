@@ -9,6 +9,8 @@ dokunan ilk barda islem o seviyeden kapatilir, getiri maliyet dahil yeniden
 hesaplanir, sermaye egrisi ve olculer yeniden uretilir. Sonraki islemler
 etkilenmez (motorlar islemleri arka arkaya, ust uste binmeden uretir).
 
+Kar al ayni modlarla, ters yonde (lehte); sira kotumser: once stop, sonra kar al.
+
 Modlar
     yuzde : giris fiyatinin %X'i kadar ters yonde (AL'da asagi, SAT'ta yukari)
     puan  : giristen X FIYAT BIRIMI kadar ters yonde (ornegin altinda 30 dolar)
@@ -45,17 +47,22 @@ class StopAyar:
         return self.mod != KAPALI and self.deger > 0
 
 
-def seviye(ayar: StopAyar, giris: float, yon: int) -> float | None:
-    """Islem icin stop fiyati; gecersizse None."""
+KAR_NEDEN = "kar_al"
+
+
+def seviye(ayar: StopAyar, giris: float, yon: int,
+           kar: bool = False) -> float | None:
+    """Islem icin stop (kar=True ise kar al) fiyati; gecersizse None."""
     if not ayar.acik:
         return None
+    ters = 1 if kar else -1       # kar al lehte, stop aleyhte yonde
     if ayar.mod == YUZDE:
-        s = giris * (1 - yon * ayar.deger / 100.0)
+        s = giris * (1 + ters * yon * ayar.deger / 100.0)
     elif ayar.mod == PUAN:
-        s = giris - yon * ayar.deger
+        s = giris + ters * yon * ayar.deger
     else:
         s = ayar.deger
-        if (s - giris) * yon >= 0:        # girisin ters tarafinda degil
+        if (s - giris) * yon * ters <= 0:   # seviye yanlis tarafta
             return None
     return s if s > 0 else None
 
@@ -70,8 +77,12 @@ def aciklama(ayar: StopAyar) -> str:
 
 
 def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
-                  cost_bp: float) -> pl.DataFrame:
-    if not ayar.acik or trades.is_empty():
+                  cost_bp: float, kar: StopAyar = StopAyar()) -> pl.DataFrame:
+    """`ayar`: stop-loss, `kar`: kar al (ayni modlar; 18.10.2026 eklendi).
+
+    Bar icinde sira kotumser: once stop (bosluk, sonra seviye), sonra kar al.
+    Ayni barda ikisi de goruluyorsa ZARAR sayilir (Strateji 1/2.1 ile ayni)."""
+    if not (ayar.acik or kar.acik) or trades.is_empty():
         return trades
     ts = bars["ts"].to_list()
     o, h, lo = (bars[c].to_list() for c in ("open", "high", "low"))
@@ -90,30 +101,37 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
             k += 1
         d, g = t["yon"], t["giris"]
         sl = seviye(ayar, g, d)
-        if sl is not None:
-            for i in range(i0 + 1, i1 + 1):
-                if d == 1:
-                    gap, vurdu = o[i] <= sl, lo[i] <= sl
-                else:
-                    gap, vurdu = o[i] >= sl, h[i] >= sl
-                if gap or vurdu:
-                    px = o[i] if gap else sl
-                    risk = abs(g - sl)
-                    t = dict(t, cikis_ts=ts[i], cikis=px, neden=NEDEN,
-                             stop=sl, hedef=float("nan"),
-                             getiri=(px - g) * d / g - cost,
-                             R=(px - g) * d / risk if risk > 0 else
-                             float("nan"))
-                    break
+        tp = seviye(kar, g, d, kar=True)
+        for i in range(i0 + 1, i1 + 1):
+            px = neden = None
+            if sl is not None:
+                if (o[i] <= sl) if d == 1 else (o[i] >= sl):
+                    px, neden = o[i], NEDEN
+                elif (lo[i] <= sl) if d == 1 else (h[i] >= sl):
+                    px, neden = sl, NEDEN
+            if px is None and tp is not None:
+                if (o[i] >= tp) if d == 1 else (o[i] <= tp):
+                    px, neden = o[i], KAR_NEDEN
+                elif (h[i] >= tp) if d == 1 else (lo[i] <= tp):
+                    px, neden = tp, KAR_NEDEN
+            if px is not None:
+                risk = abs(g - sl) if sl is not None else float("nan")
+                t = dict(t, cikis_ts=ts[i], cikis=px, neden=neden,
+                         stop=sl if sl is not None else float("nan"),
+                         hedef=tp if tp is not None else float("nan"),
+                         getiri=(px - g) * d / g - cost,
+                         R=(px - g) * d / risk if risk == risk and risk > 0
+                         else float("nan"))
+                break
         satirlar.append(t)
     return pl.DataFrame(satirlar, schema=trades.schema)
 
 
-def uygula(res, ayar: StopAyar, motor):
+def uygula(res, ayar: StopAyar, motor, kar: StopAyar = StopAyar()):
     """`motor`: strateji modulu (daily_equity / metrics icin)."""
-    if not ayar.acik or res.trades.is_empty():
+    if not (ayar.acik or kar.acik) or res.trades.is_empty():
         return res
-    trades = trades_uygula(res.trades, res.bars, ayar, res.cost_bp)
+    trades = trades_uygula(res.trades, res.bars, ayar, res.cost_bp, kar)
     daily = motor.daily_equity(trades, res.bars)
     return replace(res, trades=trades, daily=daily,
                    metrics=motor.metrics(trades, daily, res.bars))

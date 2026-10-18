@@ -147,6 +147,47 @@ def _stop_etudu(res, ham: pl.DataFrame, kapital: float,
     return sonuc
 
 
+KAR_BASAMAK = (0.5, 1.0, 2.0, 3.0, 5.0, 10.0)
+
+
+def _kar_etudu(res, ham: pl.DataFrame, kapital: float,
+               kaldirac: float) -> list[tuple[float, float, int]]:
+    sonuc = []
+    for p in KAR_BASAMAK:
+        yeni = stoploss.trades_uygula(
+            ham, res.bars, stoploss.StopAyar(), res.cost_bp,
+            stoploss.StopAyar(stoploss.YUZDE, p))
+        net = float(yeni["getiri"].sum()) * kapital * kaldirac
+        sonuc.append((p, net, int((yeni["neden"] == stoploss.KAR_NEDEN).sum())))
+    return sonuc
+
+
+def _matris(res, ham: pl.DataFrame, kapital: float,
+            kaldirac: float) -> list[tuple[float, float, float]]:
+    """(stop %, kar al %, net $) -- tum ciftler."""
+    out = []
+    for sp in STOP_BASAMAK:
+        for kp in KAR_BASAMAK:
+            yeni = stoploss.trades_uygula(
+                ham, res.bars, stoploss.StopAyar(stoploss.YUZDE, sp),
+                res.cost_bp, stoploss.StopAyar(stoploss.YUZDE, kp))
+            out.append((sp, kp, float(yeni["getiri"].sum()) * kapital
+                        * kaldirac))
+    return out
+
+
+def _matris_md(matris: list[tuple[float, float, float]]) -> list[str]:
+    kolonlar = sorted({m[1] for m in matris})
+    satirlar = ["| Stop / Kar al | " + " | ".join("%" + _say(k)
+                                                  for k in kolonlar) + " |",
+                "|---|" + "---|" * len(kolonlar)]
+    for sp in sorted({m[0] for m in matris}):
+        deger = {m[1]: m[2] for m in matris if m[0] == sp}
+        satirlar.append("| %{} | ".format(_say(sp)) + " | ".join(
+            _tl(deger[k]) for k in kolonlar) + " |")
+    return satirlar
+
+
 def _ort(x: list[float]) -> float:
     return sum(x) / len(x) if x else 0.0
 
@@ -201,6 +242,8 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
     geri_verilen = _ort([s["mfe"] - s["getiri"] * 100 for s in kaz])
 
     etut = _stop_etudu(res, ham, kapital, kaldirac)
+    kar_etut = _kar_etudu(res, ham, kapital, kaldirac)
+    kar_en_iyi = max(kar_etut, key=lambda r: r[1])
     temel_net = float(ham["getiri"].sum()) * kapital * kaldirac
     en_iyi = max(etut, key=lambda r: r[1])
     etut_satir = ["| Stop | Net $ | Fark | Stoplanan islem |",
@@ -209,6 +252,8 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
         etut_satir.append("| %{} | {} | {} | {} |".format(
             _say(p), _tl(net), _tl(net - temel_net), k))
 
+    matris = _matris(res, ham, kapital, kaldirac)
+    m_en = max(matris, key=lambda r: r[2])
     seri = en_uzun = 0
     for s in reversed(satirlar):
         seri = seri + 1 if s["getiri"] <= 0 else 0
@@ -243,6 +288,20 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
         oneri.append("Denenen sabit % stoplarin hicbiri sonucu "
                      "iyilestirmedi: kayiplar zaten strateji cikisiyla "
                      "kapaniyor ya da stop kazananlari da kesiyor.")
+    if kar_en_iyi[1] > temel_net:
+        oneri.append("Tek basina %{} kar al net sonucu {} -> {} yapardi.".format(
+            _say(kar_en_iyi[0]), _tl(temel_net), _tl(kar_en_iyi[1])))
+    else:
+        oneri.append("Sabit % kar al tek basina sonucu iyilestirmedi: "
+                     "kazananlari erken kesmek zarar veriyor olabilir; "
+                     "strateji cikisi kari daha iyi tasiyor gorunuyor.")
+    if m_en[2] > max(temel_net, en_iyi[1], kar_en_iyi[1]):
+        oneri.append("Stop %{} + kar al %{} birlikte en iyi cift: net {} "
+                     "(stopsuz-karsiz {}). Bu bir secim sonucu: ayni "
+                     "islemlerden secildigi icin fazla iyimser, baska "
+                     "doneme/varliga da bakin.".format(
+                         _say(m_en[0]), _say(m_en[1]), _tl(m_en[2]),
+                         _tl(temel_net)))
     if kay and len(kay_once_kar) / len(kay) >= 0.4:
         oneri.append("Kaybeden islemlerin %{:.0f}'i once en az %0,5 karda "
                      "gitti: kar al ya da kari kilitleyen (iz suren) stop "
@@ -295,6 +354,17 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
         "",
         *etut_satir,
         "",
+        "**Kar al etudu** (yalniz sabit % kar al; stop yok)",
+        "",
+        *["| Kar al | Net $ | Fark | Kar alinan islem |", "|---|---|---|---|"],
+        *["| %{} | {} | {} | {} |".format(_say(p), _tl(net),
+                                          _tl(net - temel_net), k)
+          for p, net, k in kar_etut],
+        "",
+        "**Stop x Kar al matrisi** (net $; satir = stop %, sutun = kar al %)",
+        "",
+        *_matris_md(matris),
+        "",
         "**Oneriler** (kural tabanli; karar sizin)",
         "",
         *["{}. {}".format(i + 1, o) for i, o in enumerate(oneri)],
@@ -316,6 +386,7 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
     kaldirac = ust[3].number_input("Kaldirac (x)", min_value=1.0, value=1.0,
                                    step=1.0, key="st_kaldirac")
     stop = stop_widgets("st_stop")
+    kar = stop_widgets("st_kar", kar=True)
     try:
         res = akis._sonuc(strat["temel"], code, timeframe, cfg)
     except Exception as exc:      # noqa: BLE001 -- kullaniciya gosterilir
@@ -326,7 +397,7 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
             code, akis.GUN.get(timeframe, 180)))
         return
     ham = res.trades.tail(adet)
-    trades = stoploss.trades_uygula(ham, res.bars, stop, res.cost_bp)
+    trades = stoploss.trades_uygula(ham, res.bars, stop, res.cost_bp, kar)
     satirlar = _satirlar(res, trades, kapital, kaldirac)
     ust[4].caption(
         "Son {} sinyal · {} · maliyet dahil · her islemde ayni kapital. "
