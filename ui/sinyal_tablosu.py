@@ -385,6 +385,28 @@ def _bist_sonuc(temel: str, code: str, timeframe: str, cfg):
         cost_bp=bt_cost.bist_cost_for(code).roundtrip_bp)
 
 
+def _strateji_gec() -> None:
+    """Combobox degisince adres cubugundaki strateji degisir; sayfa o
+    stratejinin kenar cubugu ayarlariyla (oturumda saklanir) yeniden cizilir.
+    Bolum menusu secimi de oturumda kalir -> Sinyal tablosunda kalinir."""
+    st.query_params["strateji"] = st.session_state["st_strateji"]
+
+
+def _strateji_secici(kolon, strat: dict) -> None:
+    from .strategies import all_strategies
+
+    tum = {s["key"]: s for s in all_strategies()
+           if "Sinyal tablosu" in (s.get("bolumler") or ())}
+    if strat["key"] not in tum:
+        return
+    st.session_state["st_strateji"] = strat["key"]   # adresle uyumlu tut
+    kolon.selectbox(
+        "Strateji", list(tum), key="st_strateji", on_change=_strateji_gec,
+        format_func=lambda k: "{} · {}".format(tum[k]["no"], tum[k]["ad"]),
+        help="Tek tikla baska stratejiye gec; varlik, kapital, stop-loss ve "
+             "kar al ayarlari ayni kalir.")
+
+
 def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
     """Stratejiler > <strateji> > Sinyal tablosu bolumu."""
     from dataclasses import replace
@@ -394,8 +416,10 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
     from .backtest import BIST_TF, PIYASALAR, _kodlar
     from .strategies import timeframes
 
-    ust = st.columns([1, 1, 0.9, 0.8, 0.8, 0.8], gap="small",
+    ust = st.columns([1.7, 0.9, 1, 0.9, 0.8, 0.8, 0.8], gap="small",
                      vertical_alignment="bottom")
+    _strateji_secici(ust[0], strat)
+    ust = ust[1:]
     piyasa = PIYASALAR[ust[0].selectbox("Piyasa", list(PIYASALAR),
                                         key="st_piyasa")]
     bist = piyasa == "bist"
