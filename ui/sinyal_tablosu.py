@@ -486,7 +486,11 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
                                   value=1000.0, step=100.0, key="st_kapital")
     kaldirac = ust[5].number_input("Kaldirac (x)", min_value=1.0, value=1.0,
                                    step=1.0, key="st_kaldirac")
-    from .backtest import CE_TEMEL
+    from .backtest import CE_TEMEL, _alt_seri
+    from finans_cortex.heikin_range import BAR_HOURS
+
+    def heikin_bar_saat(tf: str) -> float:
+        return BAR_HOURS.get(tf, 0.0)
     stop = stop_widgets("st_stop", ce_destek=strat["temel"] in CE_TEMEL)
     kar = stop_widgets("st_kar", kar=True)
     try:
@@ -500,7 +504,16 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
             code, akis.GUN.get(timeframe, 180)))
         return
     ham = res.trades.tail(adet)
-    trades = stoploss.trades_uygula(ham, res.bars, stop, res.cost_bp, kar)
+    alt = None
+    if stop.alt_cikis:
+        if bist:
+            st.caption("BIST'te 15dk gecmis yok: Alt dilimde cikis "
+                       "uygulanmadi.")
+        else:
+            alt = _alt_seri(strat["temel"], code, cfg)
+    trades = stoploss.trades_uygula(
+        ham, res.bars, stop, res.cost_bp, kar, alt,
+        heikin_bar_saat(timeframe))
     satirlar = _satirlar(res, trades, kapital, kaldirac)
     st.caption(
         "Son {} sinyal · {} · maliyet dahil ({} bp gidis-donus) · her "

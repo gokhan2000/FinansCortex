@@ -28,7 +28,9 @@ Kurallar (Strateji 2.1'in `zarar_kes` mantigiyla ayni, kotumser):
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from dataclasses import dataclass, replace
+from datetime import timedelta
 
 import polars as pl
 
@@ -43,6 +45,12 @@ class StopAyar:
     """Hashable (Streamlit onbellek anahtari olarak kullanilir)."""
     mod: str = KAPALI
     deger: float = 0.0
+    alt_cikis: bool = False
+    """Alt zaman diliminde cikis (23.10.2026): pozisyon acikken 15 dakikalik
+    Chandelier pozisyonun TERSINE doner donmez (o 15dk barin kapanisinda) cik;
+    4 saatlik / gunluk mumun kapanmasini bekleme. Yalniz Strateji 2/3; 15dk
+    veri yalniz bu secenek acikken okunur. Zaten ters durumda giren islem
+    icin, 15dk yon once lehe donup SONRA tekrar dondugunde tetiklenir."""
     ce_ic: bool = False
     """Mum ici Chandelier cikisi (23.10.2026): pozisyon yonundeki Chandelier
     cizgisine (bir onceki barin degeri, mum acilirken bilinir) fiyat mum
@@ -56,11 +64,12 @@ class StopAyar:
 
     @property
     def herhangi(self) -> bool:
-        return self.acik or self.ce_ic
+        return self.acik or self.ce_ic or self.alt_cikis
 
 
 KAR_NEDEN = "kar_al"
 CE_IC_NEDEN = "chandelier_ic"
+ALT_NEDEN = "alt_dilim"
 
 
 def seviye(ayar: StopAyar, giris: float, yon: int,
@@ -89,8 +98,30 @@ def aciklama(ayar: StopAyar) -> str:
             SEVIYE: "fiyat {} seviyesinde".format(d)}[ayar.mod]
 
 
+def _alt_dene(t: dict, bar_ici: bool, orijinal_cikis, a_ts, a_dir, a_cl,
+              bar_dt, g: float, d: int, cost: float) -> dict:
+    """15dk Chandelier pozisyonun tersine donduyse (ilk donus) o barin
+    kapanisinda cik. Bar-ici bir cikis (stop/Chandelier/kar al) zaten varsa,
+    alt dilim ancak o mumun BASLAMASINDAN once kapanmis bir 15dk barla onu
+    gecebilir (mum icinde sira bilinemez -> kotumser: bar-ici cikis kazanir)."""
+    limit = t["cikis_ts"] if bar_ici else orijinal_cikis
+    giris_kapanis = t["giris_ts"] + bar_dt
+    k = bisect_right(a_ts, giris_kapanis)       # giris kapanisindan SONRA
+    while k < len(a_ts) and a_ts[k] <= limit:
+        if a_dir[k] == -d and (k == 0 or a_dir[k - 1] != -d):
+            px = a_cl[k]
+            return dict(t, cikis_ts=a_ts[k] - timedelta(minutes=15),
+                        cikis=px, neden=ALT_NEDEN,
+                        stop=t["stop"], hedef=float("nan"),
+                        getiri=(px - g) * d / g - cost, R=float("nan"))
+        k += 1
+    return t
+
+
 def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
-                  cost_bp: float, kar: StopAyar = StopAyar()) -> pl.DataFrame:
+                  cost_bp: float, kar: StopAyar = StopAyar(),
+                  alt: pl.DataFrame | None = None,
+                  bar_saat: float = 0.0) -> pl.DataFrame:
     """`ayar`: stop-loss, `kar`: kar al (ayni modlar; 18.10.2026 eklendi).
 
     Bar icinde sira kotumser: once stop (bosluk, sonra seviye), sonra kar al.
@@ -103,6 +134,13 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
     if ayar.ce_ic and "long_stop" in bars.columns:
         ce_l = bars["long_stop"].to_list()
         ce_s = bars["short_stop"].to_list()
+    a_ts = a_dir = a_cl = None
+    if (ayar.alt_cikis and alt is not None and not alt.is_empty()
+            and bar_saat >= 1):
+        a_ts = alt["ts_onay"].to_list()
+        a_dir = alt["ce15_dir"].to_list()
+        a_cl = alt["close"].to_list()
+    bar_dt = timedelta(hours=bar_saat)
     cost = cost_bp / 10000.0
     satirlar = []
     j = 0
@@ -117,6 +155,8 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
             i1 = k
             k += 1
         d, g = t["yon"], t["giris"]
+        orijinal_cikis = t["cikis_ts"] + bar_dt     # motor cikisi: mum kapanisi
+        bar_ici = False
         sl = seviye(ayar, g, d)
         tp = seviye(kar, g, d, kar=True)
         for i in range(i0 + 1, i1 + 1):
@@ -146,16 +186,22 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
                          getiri=(px - g) * d / g - cost,
                          R=(px - g) * d / risk if risk == risk and risk > 0
                          else float("nan"))
+                bar_ici = True
                 break
+        if a_ts is not None:
+            t = _alt_dene(t, bar_ici, orijinal_cikis, a_ts, a_dir, a_cl,
+                          bar_dt, g, d, cost)
         satirlar.append(t)
     return pl.DataFrame(satirlar, schema=trades.schema)
 
 
-def uygula(res, ayar: StopAyar, motor, kar: StopAyar = StopAyar()):
+def uygula(res, ayar: StopAyar, motor, kar: StopAyar = StopAyar(),
+           alt: pl.DataFrame | None = None, bar_saat: float = 0.0):
     """`motor`: strateji modulu (daily_equity / metrics icin)."""
     if not (ayar.herhangi or kar.acik) or res.trades.is_empty():
         return res
-    trades = trades_uygula(res.trades, res.bars, ayar, res.cost_bp, kar)
+    trades = trades_uygula(res.trades, res.bars, ayar, res.cost_bp, kar, alt,
+                           bar_saat)
     daily = motor.daily_equity(trades, res.bars)
     return replace(res, trades=trades, daily=daily,
                    metrics=motor.metrics(trades, daily, res.bars))

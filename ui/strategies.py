@@ -535,8 +535,14 @@ def stop_widgets(key: str, kar: bool = False,
     from finans_cortex import stoploss
 
     c = st.columns([1.2, 1, 3], gap="small", vertical_alignment="bottom")
-    ce_ic = False
+    ce_ic = alt_cikis = False
     if ce_destek and not kar:
+        alt_cikis = st.checkbox(
+            "Alt dilimde cikis (15dk)", key=key + "_alt",
+            help="Pozisyon aciksa 15 dakikalik Chandelier pozisyonun tersine "
+                 "doner donmez (o 15dk barin kapanisinda) cikar; 4 saatlik / "
+                 "gunluk mumun kapanmasini beklemez. 15dk veri yalniz bu "
+                 "secenek aciksken okunur (yavaslayabilir). BIST'te yok.")
         # Mum ici Chandelier cikisi (23.10.2026): kapanisi beklemeden cikis.
         ce_ic = st.checkbox(
             "Mum ici Chandelier cikisi", key=key + "_ceic",
@@ -557,7 +563,7 @@ def stop_widgets(key: str, kar: bool = False,
     if mod == stoploss.KAPALI:
         c[2].caption("Kapali: strateji kendi cikis kurallariyla calisir."
                      if not kar else "Kapali: kar hedefi yok.")
-        return stoploss.StopAyar(ce_ic=ce_ic)
+        return stoploss.StopAyar(ce_ic=ce_ic, alt_cikis=alt_cikis)
     adim = {stoploss.YUZDE: 0.25, stoploss.PUAN: 1.0, stoploss.SEVIYE: 1.0}[mod]
     varsayilan = {stoploss.YUZDE: 1.0, stoploss.PUAN: 10.0,
                   stoploss.SEVIYE: 100.0}[mod]
@@ -566,7 +572,8 @@ def stop_widgets(key: str, kar: bool = False,
               stoploss.SEVIYE: "Seviye"}[mod]
     deger = c[1].number_input(etiket, min_value=0.0, value=varsayilan,
                               step=adim, format="%g", key=key + "_" + mod)
-    ayar = stoploss.StopAyar(mod, float(deger), ce_ic)
+    ayar = stoploss.StopAyar(mod, float(deger), ce_ic=ce_ic,
+                            alt_cikis=alt_cikis)
     c[2].caption("Aktif: {}. Bar icinde seviyeye dokunursa o seviyeden, "
                  "bosluklu acilirsa acilistan cikar; giris bari haric. "
                  "Ayni barda stop da kar al da gorulurse stop kazanir "

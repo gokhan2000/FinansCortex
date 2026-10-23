@@ -280,6 +280,19 @@ def onay_serisi(bars_15m: pl.DataFrame, cfg: HeikinConfig) -> pl.DataFrame:
     }).sort("ts_onay")
 
 
+def alt_cikis_serisi(bars_15m: pl.DataFrame, cfg: HeikinConfig) -> pl.DataFrame:
+    """Alt zaman diliminde cikis icin 15dk Chandelier (23.10.2026).
+
+    `onay_serisi` ile ayni gosterge; ek olarak 15dk barin GERCEK kapanisi
+    (cikis fiyati). Donen: ts_onay (bar kapanisi, UTC), ce15_dir, close."""
+    sade = onay_serisi(bars_15m, cfg)
+    if sade.is_empty():
+        return sade.with_columns(pl.lit(None, pl.Float64).alias("close"))
+    d = bars_15m.sort("ts")
+    return sade.with_columns(
+        pl.Series("close", d["close"].to_list(), dtype=pl.Float64))
+
+
 def prepare(df: pl.DataFrame, cfg: HeikinConfig,
             bars_15m: pl.DataFrame | None = None) -> pl.DataFrame:
     """Heikin Ashi, iki gosterge ve islem gunu sutunlarini ekler.

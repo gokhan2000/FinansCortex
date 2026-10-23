@@ -110,6 +110,25 @@ def _kodlar(piyasa: str) -> list[str]:
     return list(HESAP_KODLARI)
 
 
+@st.cache_resource(ttl=600, max_entries=16, show_spinner=False)
+def _alt_seri(temel: str, code: str, cfg):
+    """15dk Chandelier yonu -- YALNIZ 'Alt dilimde cikis' acikken hesaplanir
+    (15dk veri agirdir; kapaliyken hic okunmaz)."""
+    return motor(temel).alt_cikis_serisi(_raw_bars(code, "15m"), cfg)
+
+
+def _katman(res, temel: str, code: str, timeframe: str, cfg, piyasa: str,
+            stop: stoploss.StopAyar, kar: stoploss.StopAyar):
+    """Ortak stop-loss / kar al / mum ici / alt dilim cikis katmani."""
+    m = motor(temel)
+    alt = None
+    if (stop.alt_cikis and piyasa == "kuresel"
+            and hasattr(m, "alt_cikis_serisi")):
+        alt = _alt_seri(temel, code, cfg)
+    saat = getattr(m, "BAR_HOURS", {}).get(timeframe, 0.0)
+    return stoploss.uygula(res, stop, m, kar, alt, saat)
+
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
          piyasa: str = "kuresel", stop: stoploss.StopAyar = stoploss.StopAyar(),
@@ -122,7 +141,7 @@ def _run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
     else:
         res = motor(temel).run(charts.get_connection(), code, timeframe, cfg,
                                start=s, end=e)
-    return stoploss.uygula(res, stop, motor(temel), kar)
+    return _katman(res, temel, code, timeframe, cfg, piyasa, stop, kar)
 
 
 @st.cache_resource(ttl=600, max_entries=8, show_spinner=False)
@@ -149,7 +168,7 @@ def _lab_run(temel: str, code: str, timeframe: str, start: date, end: date, cfg,
     res = motor(temel).run_bars(_raw_bars(code, timeframe, piyasa), code,
                                 timeframe, cfg, start=s, end=e, cost_bp=maliyet,
                                 **({"bars_15m": ek} if ek is not None else {}))
-    return stoploss.uygula(res, stop, motor(temel), kar)
+    return _katman(res, temel, code, timeframe, cfg, piyasa, stop, kar)
 
 
 def _bounds(code: str, piyasa: str = "kuresel",
@@ -262,6 +281,9 @@ def panel(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
 
     stop = stop_widgets("bt_stop", ce_destek=strat["temel"] in CE_TEMEL)
     kar = stop_widgets("bt_kar", kar=True)
+    if stop.alt_cikis and piyasa == "bist":
+        st.caption("BIST'te 15dk gecmis yok: **Alt dilimde cikis** bu "
+                   "piyasada uygulanmaz.")
     if mode == MODES[1]:
         st.caption("{} verisi: {} - {} · zaman dilimi kenar cubugunda".format(
             code, first.strftime("%d.%m.%Y"), last.strftime("%d.%m.%Y")))
