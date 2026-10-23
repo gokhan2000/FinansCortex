@@ -523,15 +523,28 @@ def keep_section(key: str, fallback: str) -> None:
         st.session_state[key] = st.session_state.get("_son_" + key, fallback)
 
 
-def stop_widgets(key: str, kar: bool = False) -> "stoploss.StopAyar":
+def stop_widgets(key: str, kar: bool = False,
+                 ce_destek: bool = False) -> "stoploss.StopAyar":
     """Ortak (dinamik) stop-loss denetimi -- her strateji icin ayni.
     `kar=True`: ayni denetim KAR AL icin (hedef lehte yonde).
 
     Motorun kendi cikislarinin USTUNE biner (bkz. finans_cortex/stoploss.py).
     Kapaliyken sonuc motorun verdigiyle birebir ayni kalir."""
+    from dataclasses import replace
+
     from finans_cortex import stoploss
 
     c = st.columns([1.2, 1, 3], gap="small", vertical_alignment="bottom")
+    ce_ic = False
+    if ce_destek and not kar:
+        # Mum ici Chandelier cikisi (23.10.2026): kapanisi beklemeden cikis.
+        ce_ic = st.checkbox(
+            "Mum ici Chandelier cikisi", key=key + "_ceic",
+            help="Fiyat pozisyon yonundeki Chandelier cizgisine mum ICINDE "
+                 "dokunur dokunmaz cikar; mumun kapanmasini beklemez. Cizgi "
+                 "Heikin Ashi olceginde hesaplandigi icin gercek fiyata "
+                 "YAKLASIK uygulanir. Stop-loss ve kar al ile birlikte "
+                 "kullanilabilir.")
     yon_ = "lehte" if kar else "ters"
     ad = c[0].selectbox(
         "Kar al" if kar else "Stop-loss", list(stoploss.MODLAR),
@@ -544,7 +557,7 @@ def stop_widgets(key: str, kar: bool = False) -> "stoploss.StopAyar":
     if mod == stoploss.KAPALI:
         c[2].caption("Kapali: strateji kendi cikis kurallariyla calisir."
                      if not kar else "Kapali: kar hedefi yok.")
-        return stoploss.StopAyar()
+        return stoploss.StopAyar(ce_ic=ce_ic)
     adim = {stoploss.YUZDE: 0.25, stoploss.PUAN: 1.0, stoploss.SEVIYE: 1.0}[mod]
     varsayilan = {stoploss.YUZDE: 1.0, stoploss.PUAN: 10.0,
                   stoploss.SEVIYE: 100.0}[mod]
@@ -553,7 +566,7 @@ def stop_widgets(key: str, kar: bool = False) -> "stoploss.StopAyar":
               stoploss.SEVIYE: "Seviye"}[mod]
     deger = c[1].number_input(etiket, min_value=0.0, value=varsayilan,
                               step=adim, format="%g", key=key + "_" + mod)
-    ayar = stoploss.StopAyar(mod, float(deger))
+    ayar = stoploss.StopAyar(mod, float(deger), ce_ic)
     c[2].caption("Aktif: {}. Bar icinde seviyeye dokunursa o seviyeden, "
                  "bosluklu acilirsa acilistan cikar; giris bari haric. "
                  "Ayni barda stop da kar al da gorulurse stop kazanir "

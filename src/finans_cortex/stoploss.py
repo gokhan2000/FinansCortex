@@ -18,6 +18,8 @@ Modlar
             girisin ters tarafinda degilse (AL'da giristen yukarida) o islem
             icin yok sayilir -- stop olamaz, anlik cikis olurdu.
 
+Mum ici Chandelier cikisi (`ce_ic`) stop-loss'tan SONRA, kar al'dan ONCE denenir.
+
 Kurallar (Strateji 2.1'in `zarar_kes` mantigiyla ayni, kotumser):
     - Giris bari haric (giris kapanista; barin tepe/dibi giristen ONCEDIR).
     - Bar seviyenin otesinde ACILIRSA (bosluk) cikis acilistan, seviyeden degil.
@@ -41,13 +43,24 @@ class StopAyar:
     """Hashable (Streamlit onbellek anahtari olarak kullanilir)."""
     mod: str = KAPALI
     deger: float = 0.0
+    ce_ic: bool = False
+    """Mum ici Chandelier cikisi (23.10.2026): pozisyon yonundeki Chandelier
+    cizgisine (bir onceki barin degeri, mum acilirken bilinir) fiyat mum
+    ICINDE dokunur dokunmaz cik -- mumun kapanmasini bekleme. Yalniz
+    Chandelier sutunu olan sonuclarda (Strateji 2/3) etkilidir; HA olceginde
+    hesaplanan cizgi gercek fiyata uygulandigi icin YAKLASIKTIR."""
 
     @property
     def acik(self) -> bool:
         return self.mod != KAPALI and self.deger > 0
 
+    @property
+    def herhangi(self) -> bool:
+        return self.acik or self.ce_ic
+
 
 KAR_NEDEN = "kar_al"
+CE_IC_NEDEN = "chandelier_ic"
 
 
 def seviye(ayar: StopAyar, giris: float, yon: int,
@@ -82,10 +95,14 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
 
     Bar icinde sira kotumser: once stop (bosluk, sonra seviye), sonra kar al.
     Ayni barda ikisi de goruluyorsa ZARAR sayilir (Strateji 1/2.1 ile ayni)."""
-    if not (ayar.acik or kar.acik) or trades.is_empty():
+    if not (ayar.herhangi or kar.acik) or trades.is_empty():
         return trades
     ts = bars["ts"].to_list()
     o, h, lo = (bars[c].to_list() for c in ("open", "high", "low"))
+    ce_l = ce_s = None
+    if ayar.ce_ic and "long_stop" in bars.columns:
+        ce_l = bars["long_stop"].to_list()
+        ce_s = bars["short_stop"].to_list()
     cost = cost_bp / 10000.0
     satirlar = []
     j = 0
@@ -109,6 +126,13 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
                     px, neden = o[i], NEDEN
                 elif (lo[i] <= sl) if d == 1 else (h[i] >= sl):
                     px, neden = sl, NEDEN
+            if px is None and ce_l is not None:
+                lv = (ce_l if d == 1 else ce_s)[i - 1]
+                if lv == lv and lv > 0:           # NaN degil
+                    if (o[i] <= lv) if d == 1 else (o[i] >= lv):
+                        px, neden = o[i], CE_IC_NEDEN
+                    elif (lo[i] <= lv) if d == 1 else (h[i] >= lv):
+                        px, neden = lv, CE_IC_NEDEN
             if px is None and tp is not None:
                 if (o[i] >= tp) if d == 1 else (o[i] <= tp):
                     px, neden = o[i], KAR_NEDEN
@@ -129,7 +153,7 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
 
 def uygula(res, ayar: StopAyar, motor, kar: StopAyar = StopAyar()):
     """`motor`: strateji modulu (daily_equity / metrics icin)."""
-    if not (ayar.acik or kar.acik) or res.trades.is_empty():
+    if not (ayar.herhangi or kar.acik) or res.trades.is_empty():
         return res
     trades = trades_uygula(res.trades, res.bars, ayar, res.cost_bp, kar)
     daily = motor.daily_equity(trades, res.bars)

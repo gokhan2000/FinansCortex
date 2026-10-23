@@ -86,6 +86,7 @@ def _utc_range(start: date, end: date) -> tuple[datetime, datetime]:
 # (bars_bist), kaynagi Yahoo, maliyeti daha yuksek; bu yuzden her veri
 # yardimcisi hangi piyasada oldugunu bilmek zorunda.
 PIYASALAR = {"Kuresel {}".format(len(HESAP_KODLARI)): "kuresel", "BIST 30": "bist"}
+CE_TEMEL = ("heikin_range", "chandelier_ha")   # Chandelier cizgisi olan motorlar
 BIST_TF = ("1d", "1h")            # Yahoo gecmisi: gunluk ~21 yil, saatlik ~3 yil
 
 
@@ -259,7 +260,7 @@ def panel(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
         st.warning("Baslangic tarihi, bitis tarihinden sonra olamaz.")
         return
 
-    stop = stop_widgets("bt_stop")
+    stop = stop_widgets("bt_stop", ce_destek=strat["temel"] in CE_TEMEL)
     kar = stop_widgets("bt_kar", kar=True)
     if mode == MODES[1]:
         st.caption("{} verisi: {} - {} · zaman dilimi kenar cubugunda".format(

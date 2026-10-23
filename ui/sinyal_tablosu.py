@@ -55,7 +55,16 @@ def _satirlar(res, trades: pl.DataFrame, kapital: float,
         else:
             mfe, mae = (g - alt) / g * 100, (g - ust) / g * 100
         getiri = t["getiri"]
-        satirlar.append(dict(
+        # Karar gecikmesi: mum kapanista karar verildigi icin o mumun
+        # hareketi kacmis olur. Giris: sinyal mumunun acilisindan giris
+        # fiyatina lehte hareket. Cikis: cikis mumunun acilisindan cikis
+        # fiyatina aleyhte hareket (verilen kar / ek kayip).
+        a_g = float(bars["open"][i0]) if i0 < bars.height else g
+        a_c = float(bars["open"][min(i1, bars.height - 1)])
+        px_c = son_kapanis if acik else t["cikis"]
+        giris_gec = (g - a_g) * d / a_g * 100
+        cikis_gec = (a_c - px_c) * d / a_c * 100
+        satirlar.append(dict(giris_gec=giris_gec, cikis_gec=cikis_gec,
             yon=d, acik=acik, getiri=getiri,
             tutar=getiri * kapital * kaldirac,
             sure=t["cikis_ts"] - t["giris_ts"], neden=t["neden"],
@@ -254,6 +263,11 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
 
     matris = _matris(res, ham, kapital, kaldirac)
     m_en = max(matris, key=lambda r: r[2])
+    gec_g = _ort([s["giris_gec"] for s in kapali])
+    gec_c = _ort([s["cikis_gec"] for s in kapali])
+    gec_toplam = gec_g + gec_c
+    gec_g_pay = (100 * sum(1 for s in kapali if s["giris_gec"] > 0.0) /
+                 len(kapali))
     seri = en_uzun = 0
     for s in reversed(satirlar):
         seri = seri + 1 if s["getiri"] <= 0 else 0
@@ -288,6 +302,13 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
         oneri.append("Denenen sabit % stoplarin hicbiri sonucu "
                      "iyilestirmedi: kayiplar zaten strateji cikisiyla "
                      "kapaniyor ya da stop kazananlari da kesiyor.")
+    if gec_toplam > 0 and gec_toplam >= abs(beklenti) * 0.5:
+        oneri.append("Karar gecikmesi buyuk: islem basina ort. {} (giris "
+                     "{} + cikis {}), ortalama net beklentinin ({}) "
+                     "yarisindan fazla. Mum ici cikis (Chandelier) ya da "
+                     "alt zaman diliminde cikis denenmeye deger.".format(
+                         _yz(gec_toplam), _yz(gec_g), _yz(gec_c),
+                         _yz(beklenti)))
     if kar_en_iyi[1] > temel_net:
         oneri.append("Tek basina %{} kar al net sonucu {} -> {} yapardi.".format(
             _say(kar_en_iyi[0]), _tl(temel_net), _tl(kar_en_iyi[1])))
@@ -348,6 +369,16 @@ def rapor(res, ham: pl.DataFrame, satirlar: list[dict], kapital: float,
             _yz(kaz_mae), _yz(kaz_mfe), _yz(ort_kaz)),
         "- Kaybedenler: en kotu {} · gercek sonuc {}".format(
             _yz(kay_mae), _yz(ort_kay)),
+        "",
+        "**Karar gecikmesi** (mum kapanista karar verildigi icin kacan "
+        "hareket; ortalama, kapanmis islemler)",
+        "- Giris mumunda kacan: {} (islemlerin %{:.0f}'inde fiyat girisimizden "
+        "ONCE zaten lehimize gitmisti)".format(_yz(gec_g), gec_g_pay),
+        "- Cikis mumunda verilen: {} (cikis mumunun acilisindan cikis "
+        "fiyatina, aleyhe)".format(_yz(gec_c)),
+        "- Toplam ≈ {} / islem · ort. net getiri {} / islem. Bu tavan "
+        "olcudur: mum icinde ne olacagi onceden bilinemez, hepsi "
+        "kurtarilamaz.".format(_yz(gec_toplam), _yz(beklenti)),
         "",
         "**Stop-loss etudu** (ayni {} islem; yalniz sabit % stop eklenseydi. "
         "Stop yokken net {})".format(len(ham), _tl(temel_net)),
@@ -455,7 +486,8 @@ def render(strat: dict, cfg, timeframe: str, tf_label: str) -> None:
                                   value=1000.0, step=100.0, key="st_kapital")
     kaldirac = ust[5].number_input("Kaldirac (x)", min_value=1.0, value=1.0,
                                    step=1.0, key="st_kaldirac")
-    stop = stop_widgets("st_stop")
+    from .backtest import CE_TEMEL
+    stop = stop_widgets("st_stop", ce_destek=strat["temel"] in CE_TEMEL)
     kar = stop_widgets("st_kar", kar=True)
     try:
         res = (_bist_sonuc(strat["temel"], code, timeframe, cfg) if bist
