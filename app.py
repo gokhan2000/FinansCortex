@@ -46,7 +46,7 @@ st.set_page_config(
 )
 
 from finans_cortex import bulut, storage  # noqa: E402
-from ui import (auth, backtest, charts, home, placeholder,  # noqa: E402
+from ui import (alarm, auth, backtest, charts, home, placeholder,  # noqa: E402
                 strategies, theme, veri)
 
 # Bulutta veritabani yoksa bulut_veri/*.parquet'ten kurulur (yerelde: hicbir sey).
@@ -59,6 +59,7 @@ HAZIR = {
     "stratejiler": strategies.render,
     "backtest": backtest.render,
     "veri": veri.render,
+    "alarm": alarm.render,
 }
 
 

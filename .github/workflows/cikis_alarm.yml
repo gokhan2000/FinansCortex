@@ -1,16 +1,17 @@
-# Cikis / giris alarmi (ntfy ile telefona). Kullanici istegi, 8 Kasim 2026.
-# 4 saatlik barlar 00/04/08/12/16/20 UTC'de kapanir; her kapanisin hemen
-# sonrasinda uc kez bakilir (:03, :18, :33). Mesaj yeni bir olay varsa gider;
-# ayni olay iki kez gitmesin diye gonderilenler Actions onbelleginde tutulur.
+# Cikis / giris alarmi (ntfy ile telefona). Kullanici istegi, 8-9 Kasim 2026.
+# Neyin izlenecegi config/alarm.json'dadir (programdaki Alarmlar ekrani yazar).
+# Her 15 dakikada tetiklenir ama ILK adim "bu dakikada isim var mi" diye bakar
+# (alarm_kapi.py): 15 dk secili degilse yalniz 4 saatlik kapanislarda tam
+# calisir, digerlerinde ~10 saniyede biter -> GitHub dakikasi harcanmaz.
 # Veri Dukascopy'den cekilir, depoya YAZILMAZ (commit yok -> Streamlit
-# yeniden baslamaz).
+# yeniden baslamaz). Gonderilenler Actions onbelleginde tutulur.
 # Gerekli: GitHub > Settings > Secrets and variables > Actions > NTFY_KONU
 name: Cikis alarmi
 
 on:
   schedule:
-    - cron: "3,18,33 0,4,8,12,16,20 * * 1-5"   # hafta ici
-    - cron: "3,18,33 0 * * 6"                  # cuma 20 UTC barinin kapanisi
+    - cron: "3,18,33,48 * * * 1-5"      # hafta ici, 15 dakikada bir
+    - cron: "3,18,33,48 0 * * 6"        # cuma 20 UTC barinin kapanisi (cumartesi 00)
   workflow_dispatch:
     inputs:
       deneme:
@@ -31,18 +32,28 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Bu dakikada is var mi
+        id: kapi
+        run: python3 scripts/alarm_kapi.py
       - uses: actions/setup-python@v5
+        if: steps.kapi.outputs.devam == 'true' || github.event.inputs.deneme == '1'
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install dukascopy-python==4.0.1 duckdb==1.5.5 polars==1.43.2 numpy==1.26.4 pandas==2.1.4 pyarrow==24.0.0
+          cache-dependency-path: requirements.txt
+      - name: Bagimliliklar
+        if: steps.kapi.outputs.devam == 'true' || github.event.inputs.deneme == '1'
+        run: pip install dukascopy-python==4.0.1 duckdb==1.5.5 polars==1.43.2 numpy==1.26.4 pandas==2.1.4 pyarrow==24.0.0
       - name: Gonderilenler onbellegi
+        if: steps.kapi.outputs.devam == 'true'
         uses: actions/cache@v4
         with:
           path: .alarm
           key: alarm-${{ github.run_id }}
           restore-keys: alarm-
-      - run: python scripts/cikis_izle.py
+      - name: Izle ve mesaj gonder
+        if: steps.kapi.outputs.devam == 'true' || github.event.inputs.deneme == '1'
+        run: python scripts/cikis_izle.py
         env:
           NTFY_KONU: ${{ secrets.NTFY_KONU }}
           TEST: ${{ github.event.inputs.deneme }}

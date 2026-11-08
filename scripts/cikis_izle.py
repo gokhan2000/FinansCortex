@@ -15,9 +15,12 @@ NE YAPAR
 NOT: Bu bir STRATEJI SIMULASYONUDUR. Gercek pozisyonunuzu bilmez; "su
 varlikta stratejiye gore pozisyon kapanir" der. Karar sizindir.
 
+AYAR: config/alarm.json (programdaki Alarmlar ekranindan yazilir): hangi
+strateji x varlik x zaman dilimi, giris/cikis mesaji acik mi.
+
 Ortam degiskenleri
   NTFY_KONU   zorunlu (yoksa mesaj yazdirilir, gonderilmez)
-  GIRIS=0     giris mesajlarini kapatir (varsayilan: acik)
+  ZORLA=1     zaman kapisini yok say (deneme icin)
   YEREL=1     data/market.duckdb'yi kullanir (indirme yok) -- deneme icin
   SIMDI       ISO UTC zaman; "simdi"yi bu ani say (deneme icin)
   KURU=1      mesaj gondermez, durum dosyasini degistirmez
@@ -40,20 +43,13 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import polars as pl  # noqa: E402
 
-from finans_cortex import bulut, heikin_range as hr, ingest, storage  # noqa: E402
-from finans_cortex.instruments import HESAP_KODLARI  # noqa: E402
+from alarm_kapi import calismali  # noqa: E402  (scripts/ ayni klasor)
+from finans_cortex import alarm, bulut, heikin_range as hr, ingest, storage  # noqa: E402
 
 DURUM = ROOT / ".alarm" / "durum.json"
 TZ = ZoneInfo("Europe/Istanbul")
 
-# (ad, ayar). Strateji 4 = ui/strategies.py'deki "chandelier_zlsma" kaydi;
-# iki yerde AYNI olmali (buradaki UI'a bagli degil: Actions'ta streamlit yok).
-STRATEJILER = {
-    "Strateji 4": hr.HeikinConfig(rf_kullan=False, zlsma=32, zlsma_cikis=True),
-}
-# zaman dilimi -> (bar saati, simulasyon icin geriye bakilacak gun)
-ZAMANLAR = {"4h": (4.0, 900), "1d": (24.0, 2500)}
-ETIKET = {"4h": "4 saat", "1d": "gunluk"}
+ETIKET = {"15m": "15 dakika", "4h": "4 saat", "1d": "gunluk"}
 GERI_BAR = 3          # kacirilan calismayi yakalamak icin son N bar
 NEDEN = {
     "zlsma": "fiyat ZLSMA'nin ters tarafina gecti",
@@ -72,10 +68,13 @@ def saat(t: datetime) -> str:
     return t.astimezone(TZ).strftime("%d.%m %H:%M")
 
 
-def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime) -> list[dict]:
-    bar_saat, gun = ZAMANLAR[tf]
+def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime,
+            giris: bool, cikis: bool) -> list[dict]:
+    bar_saat, gun, _ = alarm.ZAMANLAR[tf]
     bar = timedelta(hours=bar_saat)
-    bars = storage.read_bars(con, code, tf)
+    # Gostergeler isinsin diye simulasyon gunune +60 gun eklenir.
+    bars = storage.read_bars(con, code, tf,
+                             start=simdi - timedelta(days=gun + 60))
     # Yalniz KAPANMIS barlar: son kova yarim kalmis olabilir.
     bars = bars.filter(pl.col("ts") + bar <= simdi)
     if bars.height < 400:
@@ -90,7 +89,7 @@ def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime) -> list[dict
     cikti = []
     for t in res.trades.tail(6).to_dicts():
         yon = "AL" if t["yon"] == 1 else "SAT"
-        if t["neden"] != "veri_sonu" and t["cikis_ts"] >= sinir:
+        if cikis and t["neden"] != "veri_sonu" and t["cikis_ts"] >= sinir:
             cikti.append(dict(
                 anahtar=f"{ad}|{code}|{tf}|cikis|{t['cikis_ts'].isoformat()}",
                 tur="cikis", ts=t["cikis_ts"] + bar,
@@ -100,7 +99,7 @@ def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime) -> list[dict
                        f"Giris {fiyat(t['giris'])} ({saat(t['giris_ts'])}) → "
                        f"{t['getiri'] * 100:+.2f}% (maliyet dahil)\n"
                        f"Mum kapanisi {saat(t['cikis_ts'] + bar)} TR")))
-        if t["giris_ts"] >= sinir and os.environ.get("GIRIS", "1") != "0":
+        if giris and t["giris_ts"] >= sinir:
             cikti.append(dict(
                 anahtar=f"{ad}|{code}|{tf}|giris|{t['giris_ts'].isoformat()}",
                 tur="giris", ts=t["giris_ts"] + bar,
@@ -135,12 +134,16 @@ def main() -> None:
         print("deneme mesaji gonderildi")
         return
     kuru = os.environ.get("KURU") == "1"
+    ayar = alarm.yukle()
     simdi = (datetime.fromisoformat(os.environ["SIMDI"]).astimezone(timezone.utc)
              if os.environ.get("SIMDI") else datetime.now(timezone.utc))
     konu = os.environ.get("NTFY_KONU", "").strip()
     gonderilen = (set(json.loads(DURUM.read_text("utf-8")))
                   if DURUM.exists() else set())
 
+    if not calismali(ayar, simdi) and os.environ.get("ZORLA") != "1":
+        print("Bu dakikada izlenecek bar kapanisi yok; atlandi.")
+        return
     with tempfile.TemporaryDirectory() as tmp:
         if os.environ.get("YEREL") == "1":
             con = storage.connect(read_only=True)
@@ -151,11 +154,20 @@ def main() -> None:
             ingest.backfill_all(con, sure_sn=600)
 
         yeni = []
-        for ad, cfg in STRATEJILER.items():
-            for code in HESAP_KODLARI:
-                for tf in ZAMANLAR:
+        tanim = alarm.stratejiler()
+        for key, kural in ayar["stratejiler"].items():
+            if key not in tanim:
+                print(f"UYARI: bilinmeyen strateji {key} (silinmis varyant?)")
+                continue
+            ad, cfg = tanim[key]
+            for code, tfler in kural.get("secim", {}).items():
+                for tf in tfler:
+                    if tf not in alarm.ZAMANLAR:
+                        continue
                     try:
-                        yeni += olaylar(con, code, tf, ad, cfg, simdi)
+                        yeni += olaylar(con, code, tf, ad, cfg, simdi,
+                                        kural.get("giris", True),
+                                        kural.get("cikis", True))
                     except Exception as exc:  # noqa: BLE001 -- biri digerini durdurmasin
                         print(f"HATA {code} {tf}: {exc}", flush=True)
         con.close()

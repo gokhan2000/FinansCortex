@@ -1,0 +1,21 @@
+{
+  "saat15": [
+    10,
+    22
+  ],
+  "stratejiler": {
+    "chandelier_zlsma": {
+      "cikis": true,
+      "giris": true,
+      "secim": {
+        "XAGUSD": [
+          "4h"
+        ],
+        "XAUUSD": [
+          "4h"
+        ]
+      }
+    }
+  },
+  "surum": 1
+}

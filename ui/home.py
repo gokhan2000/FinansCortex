@@ -30,6 +30,10 @@ TICKERS = {
 TICK_COLORS = ["yellow", "blue", "aqua", "orange", "violet", "magenta"]
 
 ICONS = {
+    "alarm": """<svg viewBox="0 0 24 24" width="42" height="42" fill="none"
+        stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+        stroke-linejoin="round"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/>
+        <path d="M10 21a2 2 0 0 0 4 0"/><path d="M12 3v2"/></svg>""",
     "piyasalar": """<svg viewBox="0 0 24 24" width="42" height="42" fill="none"
         stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
         stroke-linejoin="round"><path d="M3 20.5h18"/>
@@ -76,6 +80,8 @@ MENU = [
      "yeni strateji tanimla", "orange", False),
     ("backtest", "Backtest", "Strateji, varlik ve tarih araligi sec; "
      "islemler, kar/zarar, grafik ve sermaye egrisi", "magenta", True),
+    ("alarm", "Alarmlar", "Giris / cikis sinyali telefona mesaj olarak gelsin: "
+     "hangi varlik, hangi zaman dilimi (15 dk dahil)", "orange", True),
     ("veri", "Veri Merkezi", "Veri tazeligi, tek tikla guncelleme, "
      "varlik kapsami ve kalite denetimi", "yellow", True),
 ]

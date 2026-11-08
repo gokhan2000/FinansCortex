@@ -159,3 +159,24 @@ farklı olsa bile) çift tıklamayla çalışır. Tek şart: o makinede
 `config/eposta.json` başka makinede çözülemez (DPAPI); orada
 `EPOSTA_AYARLA.bat` yeniden çalıştırılır. `config/erisim.json` (parola özeti)
 taşınır ve çalışır.
+
+## Çıkış / giriş alarmı (telefona mesaj) — 8-9 Kasım 2026
+
+Strateji 2/3/4'te yeni **giriş / çıkış** olunca telefona ntfy bildirimi gelir.
+Kontrolü GitHub Actions yapar (`.github/workflows/cikis_alarm.yml`), bilgisayar
+kapalı olabilir. Hangi varlık / zaman dilimi (15 dk dahil) için geleceği programda
+**Ana ekran > Alarmlar**'dan seçilir; ayar `config/alarm.json`'a yazılır ve
+**GitHub'a gönder** düğmesiyle (yalnız bu dosya) GitHub'a gider.
+
+**Bir kerelik kurulum**
+1. Telefona **ntfy** uygulamasını kur, **+** ile bir konuya abone ol (konu adı
+   rastgele ve gizli olmalı; başkası bilirse mesajları okuyabilir).
+2. GitHub'da depo > Settings > Secrets and variables > Actions > New repository
+   secret: ad `NTFY_KONU`, değer aynı konu adı.
+3. Actions > Cikis alarmi > Run workflow > deneme kutusuna `1` yaz: telefona
+   "DeepCortex · deneme" gelirse hazır.
+
+**Sınırlar:** simülasyondur (gerçek pozisyonu bilmez); 4 saatlik mesaj mum
+kapanışından birkaç dakika sonra gelir; 15 dk alarm her 15 dakikada tam çalıştığı
+için GitHub'ın ücretsiz 2000 dk/ay sınırını yer — bu yüzden yalnız seçili TR
+saatlerinde çalışır (Alarmlar ekranı tahmini gösterir). Strateji 1 desteklenmez.

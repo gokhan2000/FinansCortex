@@ -50,6 +50,7 @@ backtest.py     ORTAK backtest paneli: Backtest menüsü + Stratejiler > Backtes
                 (Tek backtest | Canlı parametre ayarı + Farklı kaydet)
 akis.py         Kural akışı ekranı: SVG şema + mum grafiği, eş zamanlı animasyon
 sinyal_tablosu.py  Sinyal tablosu: son 10-50 AL/SAT sinyali tek tabloda
+alarm.py         Alarmlar ekranı: hangi strateji × varlık × zaman dilimi telefona mesaj (config/alarm.json)
 gelistir.py     Geliştir ekranı: teşhis (zayıf nokta kartları) + parametre
                 taraması + "bunu dene" karşılaştırması (hesap src/gelistir.py'de)
 auth.py         Parola kapısı (yalnız uzaktan erişimde devrede)

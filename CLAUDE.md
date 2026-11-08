@@ -61,7 +61,7 @@ Sıradaki karar kullanıcıda → `docs/STRATEJI_GECMISI.md`.
   dosya; ana veri her gün git'e yazılmaz). `bulut.hazirla()` ana veri + son.parquet'i
   birleştirir, dosya değişince yeniden kurar. BIST 30 (`bars_bist`) otomatik
   güncellenmez (yalnız ana veri). Ana veriyi `BULUT_VERI_YAZ.bat` tazeleyince son.parquet silinir.
-- **Çıkış alarmı (8 Kasım 2026):** `.github/workflows/cikis_alarm.yml` + `scripts/cikis_izle.py` — Strateji 4'ün (4s+1g) yeni giriş/çıkış olaylarını ntfy ile telefona yollar; 4 saatlik kapanışların hemen ardından çalışır, depoya YAZMAZ (Streamlit yeniden başlamaz). Gizli konu adı GitHub secret `NTFY_KONU`'dadır (depoya yazma). Gönderilenler Actions önbelleğinde (`.alarm/`). Simülasyondur: gerçek pozisyonu bilmez.
+- **Çıkış alarmı (8 Kasım 2026):** `.github/workflows/cikis_alarm.yml` + `scripts/cikis_izle.py` — Strateji 4'ün (4s+1g) yeni giriş/çıkış olaylarını ntfy ile telefona yollar; 4 saatlik kapanışların hemen ardından çalışır, depoya YAZMAZ (Streamlit yeniden başlamaz). Gizli konu adı GitHub secret `NTFY_KONU`'dadır (depoya yazma). Neyin izleneceği `config/alarm.json`'da (programdaki **Alarmlar** ekranı yazar; "GitHub'a gönder" düğmesi yalnız bu dosyayı push eder). Strateji 2/3/4 + varyantları × 8 varlık × 15dk/4s/1g. 15dk yalnız seçili TR saatlerinde (GitHub ücretsiz 2000 dk sınırı). Gönderilenler Actions önbelleğinde (`.alarm/`). Simülasyondur: gerçek pozisyonu bilmez.
 - `bulut_veri/`yi yalnız kullanıcı evde `BULUT_VERI_YAZ.bat` çalıştırınca yenilenir;
   elle düzenleme. Depo PRIVATE, public yapma. `config/erisim.json`/`eposta.json`
   depoya girmez (`.gitignore`).
