@@ -115,6 +115,33 @@ Tolerans, bekleyen sinyal ve "tek gosterge sayilmaz" kurali burada anlamsizdir.
 """
 
 
+RULES_ZLSMA = """
+**Kaynak:** TradingView acik kaynak "Chandelier Exit ZLSMA Strategy"
+(Chandelier: everget, ZLSMA: netweaver). Betigin kendi geri testi
+**yayimlanmamis** (bir surumunun yazari repaint uyarisi veriyor); bu strateji
+bizim veriyle ILK KEZ olculuyor.
+
+**Kurallar**
+1. Grafik **Heikin Ashi** mumuna cevrilir; Chandelier bu mumlar uzerinde
+   calisir (periyot 1, carpan 1,8 -- Strateji 2/3 ile ayni).
+2. **ZLSMA** (sifir gecikmeli dogrusal regresyon ortalamasi, periyot **32**):
+   `2 x LSMA - LSMA(LSMA)`. GERCEK kapanistan hesaplanir.
+3. **Giris:** Chandelier yon degistirdigi barin kapanisinda, **fiyat ZLSMA'nin
+   islem yonundeki tarafindaysa** (AL: ustunde, SAT: altinda). Degilse alinmaz.
+   Betik "fiyat ZLSMA'yi KESERKEN" ister; burada "dogru tarafta" yeter
+   (kesisim cok seyrek, islem sayisini cok dusururdu).
+4. **Cikis:** fiyat ZLSMA'nin ters tarafina gecince bar kapanisinda
+   (betikteki cikis kurali). Ters Chandelier sinyali de ayni sekilde kapatir.
+
+**Strateji 3'ten farki:** giris ZLSMA ile filtrelenir, cikis ZLSMA ile
+hizlanir. Strateji 3'e trend filtresi (EMA 200) eklemek kenari belirgin
+artirmisti; burada trend olcusu ZLSMA.
+
+**Not:** cikis kuralinin hizli olmasi (ZLSMA fiyata yakindir) islem sayisini
+artirabilir; Backtest'te `ZLSMA cikisi` kapali / acik karsilastirin.
+"""
+
+
 RULES_HEIKIN = """
 **Videodaki kurallar**
 1. Grafik **Heikin Ashi** mumuna cevrilir; iki gosterge de bu mumlar
@@ -234,6 +261,32 @@ BASE = {
         efsane=("Bu stratejide 'bekleyen sinyal' yoktur: onaylanacak ikinci "
                 "gosterge olmadigi icin sinyal olustugu anda islem acilir."),
     ),
+    # Kullanici (8 Kasim 2026): internette Chandelier Exit ile gelistirilmis
+    # bir strateji arandi; en somut aday TradingView "Chandelier Exit ZLSMA
+    # Strategy". Ayni motor (`zlsma=32`, `zlsma_cikis=True`).
+    "chandelier_zlsma": dict(
+        no="4", ad="Chandelier Exit + ZLSMA",
+        kaynak="TradingView acik kaynak · Chandelier Exit ZLSMA Strategy",
+        aciklama=("Strateji 3'un (Chandelier tek basina) ZLSMA ile "
+                  "guclendirilmis hali: Chandelier yon degistirdiginde yalniz "
+                  "fiyat ZLSMA'nin islem yonundeki tarafindaysa girilir; fiyat "
+                  "ZLSMA'nin ters tarafina gecince cikilir. Kaynak betigin "
+                  "geri testi yayimlanmamis -- ilk kez burada olculuyor."),
+        etiketler=("Trend filtresi", "ZLSMA 32", "4 saat / gunluk"),
+        renk="violet", motor=heikin,
+        cfg=heikin.HeikinConfig(rf_kullan=False, zlsma=32, zlsma_cikis=True),
+        timeframe="4h", zamanlar=TF_SWING,
+        bolumler=("Ozet", "Sinyaller", "Backtest", "Kurallar", "Kural akisi",
+                  "Sinyal tablosu", "Gelistir"),
+        kurallar=RULES_ZLSMA,
+        egriler=(("ha_close", "Heikin Ashi kapanis", "blue"),
+                 ("zl_val", "ZLSMA", "yellow")),
+        isaretler=(("ce_sig", "Chandelier", "orange"),),
+        gun_notu=("Pozisyon gun sonunda kapanmaz; cikis ters Chandelier ya "
+                  "da fiyatin ZLSMA'nin ters tarafina gecmesidir."),
+        efsane=("Bekleyen sinyal yoktur. ZLSMA filtresine takilan Chandelier "
+                "donusleri islem acmaz."),
+    ),
 }
 
 # Parametre etiketleri (fark metni ve parametre tablosu) ve widget anahtar
@@ -257,10 +310,12 @@ PARAM_LABELS_HEIKIN = (
     ("kar_al", "Kar al %"), ("zarar_kes", "Zarar kes %"),
     ("trend_filter", "Trend filtresi"),
     ("onay_15m", "15dk Chandelier teyidi"),
+    ("zlsma", "ZLSMA filtresi"), ("zlsma_cikis", "ZLSMA cikisi"),
 )
 PARAM_KEYS_HEIKIN = ("_ha", "_ceper", "_cemult", "_ceclose", "_rfper",
                      "_rfmult", "_tol", "_short", "_cecikis", "_doji",
-                     "_dojiesik", "_tekters", "_karal", "_zararkes", "_trend", "_onay15")
+                     "_dojiesik", "_tekters", "_karal", "_zararkes", "_trend", "_onay15",
+                     "_zlsma", "_zlcikis")
 
 # Eski cagrilar icin adlar.
 PARAM_LABELS = PARAM_LABELS_EMA
@@ -269,7 +324,8 @@ RULES_MD = RULES_EMA
 
 
 def param_labels(temel: str) -> tuple:
-    return (PARAM_LABELS_HEIKIN if temel in ("heikin_range", "chandelier_ha")
+    return (PARAM_LABELS_HEIKIN if temel in ("heikin_range", "chandelier_ha",
+                                                "chandelier_zlsma")
             else PARAM_LABELS_EMA)
 
 
@@ -345,7 +401,7 @@ def param_text(field: str, value) -> str:
         return "acik" if value else "kapali"
     if field == "tolerance":
         return "{} bar".format(value)
-    if field == "trend_filter":
+    if field in ("trend_filter", "zlsma"):
         return "{} bar".format(value) if value else "kapali"
     if isinstance(value, float):
         return "{:g}".format(value).replace(".", ",")
@@ -608,7 +664,7 @@ def param_widgets(
         defaults = BASE[temel]["cfg"]
     if caption:
         st.caption(caption)
-    if temel in ("heikin_range", "chandelier_ha"):
+    if temel in ("heikin_range", "chandelier_ha", "chandelier_zlsma"):
         return _heikin_widgets(defaults, key, sliders)
     return _ema_widgets(defaults, key, sliders)
 
@@ -715,6 +771,15 @@ def _heikin_widgets(
                      "bulundugu yonde islem acilir: fiyat ortalamanin "
                      "ustundeyse AL, altindaysa SAT. Trende ters sinyaller "
                      "elenir -- islem sayisi belirgin duser.")
+    st.markdown("**ZLSMA** (Strateji 4)")
+    zl = num("ZLSMA periyodu", 0, 200, int(defaults.zlsma), step=1,
+             key=key + "_zlsma",
+             help="0 = kapali. Acikken Chandelier donusunde fiyat ZLSMA'nin "
+                  "islem yonundeki tarafinda olmali (AL: ustunde).")
+    zl_cik = st.checkbox("ZLSMA'nin ters tarafina gecince cik",
+                         defaults.zlsma_cikis, key=key + "_zlcikis",
+                         help="Fiyat ZLSMA'nin pozisyonun tersi tarafina "
+                              "gecince bar kapanisinda cikar.")
     st.markdown("**Kar al / zarar kes** (Strateji 2.1)")
     tek = st.checkbox("TEK ters sinyalde cik", defaults.tek_ters,
                       key=key + "_tekters",
@@ -736,7 +801,7 @@ def _heikin_widgets(
         tolerance=int(tol), allow_short=short, exit_chandelier=ce_exit,
         doji_exit=doji, doji_body=float(body), kar_al=float(kar),
         zarar_kes=float(zarar), tek_ters=tek, trend_filter=int(trend), onay_15m=onay15,
-        rf_kullan=defaults.rf_kullan)
+        zlsma=int(zl), zlsma_cikis=zl_cik, rf_kullan=defaults.rf_kullan)
 
 
 def _strategy_page(strat: dict) -> None:

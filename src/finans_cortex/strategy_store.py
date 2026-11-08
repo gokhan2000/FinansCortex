@@ -32,7 +32,8 @@ STORE_PATH = Path(__file__).resolve().parents[2] / "config" / "stratejiler.json"
 # eklenince buraya da bir satir gerekir; varyantin hangi motorla acilacagini
 # kayittaki "temel" alani belirler.
 CONFIGS = {"ema10": EmaConfig, "heikin_range": HeikinConfig,
-           "chandelier_ha": HeikinConfig}
+           "chandelier_ha": HeikinConfig,
+           "chandelier_zlsma": HeikinConfig}
 
 # Temel strateji anahtarlari -- varyant bu anahtarlari alamaz.
 RESERVED = set(CONFIGS)

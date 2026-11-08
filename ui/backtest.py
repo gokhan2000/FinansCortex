@@ -86,7 +86,7 @@ def _utc_range(start: date, end: date) -> tuple[datetime, datetime]:
 # (bars_bist), kaynagi Yahoo, maliyeti daha yuksek; bu yuzden her veri
 # yardimcisi hangi piyasada oldugunu bilmek zorunda.
 PIYASALAR = {"Kuresel {}".format(len(HESAP_KODLARI)): "kuresel", "BIST 30": "bist"}
-CE_TEMEL = ("heikin_range", "chandelier_ha")   # Chandelier cizgisi olan motorlar
+CE_TEMEL = ("heikin_range", "chandelier_ha", "chandelier_zlsma")   # Chandelier cizgisi olan motorlar
 BIST_TF = ("1d", "1h")            # Yahoo gecmisi: gunluk ~21 yil, saatlik ~3 yil
 
 

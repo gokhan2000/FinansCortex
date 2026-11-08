@@ -369,6 +369,31 @@ sinyal listesi bunu kullanır. Veri güncellenir, grafikte/ana ekranda görünü
 Hedef piyasa VİOP; yalnız Brent forex'te. Yedekler: `yedek/*_olcu_duzeltmesi_oncesi.py`,
 `yedek/*_btc_oncesi.py`.
 
+## Strateji 4 — Chandelier + ZLSMA (8 Kasım 2026)
+
+Kullanıcı: *"internette Chandelier Exit ile geliştirilmiş başarılı bir strateji
+bulabilir misin, projeye ekleyelim."* Arama sonucu: **doğrulanmış başarılı bir
+strateji bulunamadı**; en somut aday TradingView açık kaynak "Chandelier Exit
+ZLSMA Strategy" (everget + netweaver), geri testi yayımlanmamış, bir
+sürümünün yazarı repaint uyarısı veriyor. Kuruldu, ÖLÇÜLMEDİ (kullanıcı bakacak).
+
+Ayrı modül YAZILMADI: `HeikinConfig.zlsma` (periyot, 0 = kapalı; Strateji 4 = 32)
+ve `zlsma_cikis`, `rf_kullan=False` ile birlikte. `indicators.zlsma/linreg`
+(`2·LSMA − LSMA(LSMA)`, Pine `ta.linreg` ile aynı; elle polyfit ile doğrulandı,
+doğrusal seride gecikme 0). Giriş: Chandelier dönüşünde gerçek kapanış ZLSMA'nın
+işlem yönündeki tarafında olmalı (betik "keserken" ister, burada "doğru tarafta").
+Çıkış: fiyat ZLSMA'nın ters tarafına geçince bar kapanışında (`zlsma`) ya da ters
+Chandelier. `zlsma` **`GOSTERGE_PARAMLARI` içindedir** (prepare'de hesaplanır),
+`ARAMA_UZAYI`'nda `zlsma` ve `zlsma_cikis` var.
+
+**Doğrulandı:** zlsma kapalıyken eski motorla birebir aynı (S2, S3, S2.1-benzeri
+× 3 varlık × 4s+1g = 18 koşu, 0 sapma); S4'te giriş yönü ZLSMA'ya ters işlem 0,
+`zlsma` çıkışı ZLSMA ters tarafında olmayan 0; kural akışı 320 işlem hatasız;
+4 strateji × 7 bölüm AppTest hatasız. **Davranış notu (performans değil):**
+XAUUSD/EURUSD/DAX 4s+1g'de çıkışların ~%85'i `zlsma` — ZLSMA fiyata çok yakın
+olduğu için çıkış çoğunlukla onunla olur; `zlsma_cikis` kapalı/açık karşılaştırması
+Backtest'te kullanıcıda.
+
 ## Doğrulanmış olanlar (tekrar test etmeye gerek yok)
 
 - **İdempotentlik:** aynı veri ikinci kez yazılınca `+0 satır`

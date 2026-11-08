@@ -243,3 +243,38 @@ def signals_only(df: pl.DataFrame) -> pl.DataFrame:
     return df.filter(pl.col("signal").is_not_null()).select(
         "ts", "close", "atr", "long_stop", "short_stop", "direction", "signal"
     )
+
+
+def linreg(y, length: int):
+    """Kayan pencerenin dogrusal regresyon (en kucuk kareler) SON noktasi.
+
+    Pine `ta.linreg(src, length, 0)` ile ayni. Ilk length-1 deger NaN."""
+    import numpy as np
+
+    y = np.asarray(y, dtype=float)
+    n = len(y)
+    out = np.full(n, np.nan)
+    if length < 2 or n < length:
+        return out
+    x = np.arange(length, dtype=float)
+    sx, sxx = x.sum(), (x * x).sum()
+    sy = np.convolve(y, np.ones(length), mode="valid")
+    sxy = np.correlate(y, x, mode="valid")
+    slope = (length * sxy - sx * sy) / (length * sxx - sx * sx)
+    out[length - 1:] = (sy - slope * sx) / length + slope * (length - 1)
+    return out
+
+
+def zlsma(close, length: int = 32):
+    """Sifir gecikmeli LSMA (netweaver): 2 * LSMA - LSMA(LSMA).
+
+    Ilk 2*length-2 deger NaN."""
+    import numpy as np
+
+    l1 = linreg(close, length)
+    ok = ~np.isnan(l1)
+    l2 = np.full(len(l1), np.nan)
+    if ok.any():
+        i0 = int(np.argmax(ok))
+        l2[i0:] = linreg(l1[i0:], length)
+    return 2.0 * l1 - l2

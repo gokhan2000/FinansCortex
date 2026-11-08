@@ -54,7 +54,7 @@ import polars as pl
 
 from . import backtest, storage
 from .akis import ATLANDI, GECTI, KALDI, Adim, Dugum, Isaret
-from .indicators import ChandelierConfig, chandelier_exit
+from .indicators import ChandelierConfig, chandelier_exit, zlsma as zlsma_hesapla
 from .perf import (  # noqa: F401  -- ortak performans katmani disa aktariliyor
     DAY_ROLL, TRADE_SCHEMA, Result, daily_equity, metrics)
 
@@ -136,6 +136,16 @@ class HeikinConfig:
     fiyatin ortalamaya gore bulundugu YONDE islem acilir -- fiyat ortalamanin
     ustundeyse AL, altindaysa SAT. Teshisteki olcutun aynisi: gercek kapanis
     ve `ewm_mean(span=N)`; Heikin Ashi fiyatindan DEGIL."""
+    zlsma: int = 0
+    """ZLSMA giris filtresi: periyot (0 = kapali; Strateji 4 icin 32).
+    Acikken Chandelier yon degistirdiginde fiyat (GERCEK kapanis) ZLSMA'nin
+    islem yonundeki tarafinda olmali: AL icin ustunde, SAT icin altinda.
+    TradingView 'Chandelier Exit ZLSMA Strategy' betiginden uyarlandi
+    (23.10.2026); betik 'fiyat ZLSMA'yi KESERKEN' ister, burada 'dogru
+    tarafta' yeter (kesisim cok seyrek)."""
+    zlsma_cikis: bool = False
+    """Fiyat ZLSMA'nin pozisyonun TERSI tarafina gecince bar kapanisinda cik
+    (betikteki cikis kurali). `zlsma` periyodu kapaliysa etkisizdir."""
 
 
 def warmup_bars(cfg: HeikinConfig) -> int:
@@ -145,7 +155,7 @@ def warmup_bars(cfg: HeikinConfig) -> int:
     periyot pratikte oturmaya yeter. Chandelier'in ATR'si cok daha hizli.
     """
     return max(3 * cfg.rf_period, 5 * cfg.ce_period,
-               3 * cfg.trend_filter, 30)
+               3 * cfg.trend_filter, 3 * cfg.zlsma, 30)
 
 
 # --------------------------------------------------------------------------
@@ -340,6 +350,16 @@ def prepare(df: pl.DataFrame, cfg: HeikinConfig,
         trend_ema = np.full(n, np.nan)
         trend_dir = np.zeros(n, dtype=np.int8)
 
+    # ZLSMA yonu (gercek kapanis). NaN (isinma) -> 0 = filtre gecmez.
+    if cfg.zlsma > 0:
+        zl_val = zlsma_hesapla(df["close"].to_numpy(), cfg.zlsma)
+        zl_dir = np.where(np.isnan(zl_val), 0,
+                          np.sign(df["close"].to_numpy() - zl_val)
+                          ).astype(np.int8)
+    else:
+        zl_val = np.full(n, np.nan)
+        zl_dir = np.zeros(n, dtype=np.int8)
+
     out_ek = []
     if cfg.onay_15m:
         onay = onay_serisi(bars_15m, cfg)
@@ -366,6 +386,8 @@ def prepare(df: pl.DataFrame, cfg: HeikinConfig,
         *out_ek,
         pl.Series("trend_dir", trend_dir),
         pl.Series("trend_ema", trend_ema),
+        pl.Series("zl_dir", zl_dir),
+        pl.Series("zl_val", zl_val),
         (pl.col("ts") + DAY_ROLL).dt.date().alias("tday"),
         pl.Series("ce_dir", ce_dir),
         pl.Series("ce_sig", ce_sig),
@@ -416,6 +438,7 @@ def _loop(
     ce_sig = df["ce_sig"].to_list()
     rf_sig = df["rf_sig"].to_list()
     ce_dir = df["ce_dir"].to_list()
+    zl_dir = df["zl_dir"].to_list()
     long_stop = df["long_stop"].to_list()
     short_stop = df["short_stop"].to_list()
     doji = df["doji"].to_list()
@@ -517,6 +540,8 @@ def _loop(
                 close_trade(i, "tek_ters")
             elif cfg.exit_chandelier and ce_dir[i] == -pos:
                 close_trade(i, "chandelier")
+            elif cfg.zlsma > 0 and cfg.zlsma_cikis and zl_dir[i] == -pos:
+                close_trade(i, "zlsma")
             elif cfg.doji_exit and doji[i] and i > e_i:
                 close_trade(i, "doji")
 
@@ -524,6 +549,9 @@ def _loop(
             # Trend filtresi: fiyat ortalamanin hangi tarafindaysa yalniz o
             # yonde islem acilir. Kapaliyken (0) hicbir sinyal elenmez.
             if cfg.trend_filter > 0 and trend_dir[i] != pair:
+                continue
+            # ZLSMA filtresi: fiyat ZLSMA'nin islem yonundeki tarafinda mi.
+            if cfg.zlsma > 0 and zl_dir[i] != pair:
                 continue
             # 15 dakikalik Chandelier teyidi: kucuk zaman dilimi de ayni
             # yonde olmali. 0 = o anda teyit verisi yok -> islem acilmaz.
@@ -732,6 +760,11 @@ def sema(cfg: HeikinConfig = HeikinConfig()) -> list[Dugum]:
             "fiyat {} barlik ortalamanin dogru tarafinda mi".format(
                 cfg.trend_filter),
             hayir="Trende ters, alinmaz"))
+    if cfg.zlsma > 0:
+        dugumler.append(Dugum(
+            "zlsma", "kosul", "Fiyat ZLSMA'nin dogru tarafinda mi?",
+            "ZLSMA {} · AL: ustunde, SAT: altinda".format(cfg.zlsma),
+            hayir="ZLSMA'ya ters, alinmaz"))
     if not cfg.allow_short:
         dugumler.append(Dugum("izin", "kosul", "AL yonunde mi?",
                               "SAT islemleri kapali", hayir="Yalnizca cikis"))
@@ -766,6 +799,8 @@ def _cikis_ozeti(cfg: HeikinConfig) -> str:
         parcalar.append("Chandelier donusu")
     if cfg.doji_exit:
         parcalar.append("fitilli mum")
+    if cfg.zlsma > 0 and cfg.zlsma_cikis:
+        parcalar.append("ZLSMA'nin ters tarafi")
     return " / ".join(parcalar)
 
 
@@ -847,6 +882,14 @@ def izle(bars: pl.DataFrame, islem: dict, cfg: HeikinConfig = HeikinConfig(),
             adimlar.append(Adim("trend", GECTI, "fiyat {} · {} ortalama {} · {}".format(
                 _fiyat(satir["close"]), cfg.trend_filter, _fiyat(ema_v),
                 "ustunde" if satir["close"] > ema_v else "altinda")))
+    if cfg.zlsma > 0:
+        zv = satir.get("zl_val")
+        if zv is None or zv != zv:
+            adimlar.append(Adim("zlsma", ATLANDI, ""))
+        else:
+            adimlar.append(Adim("zlsma", GECTI, "fiyat {} · ZLSMA({}) {} · {}".format(
+                _fiyat(satir["close"]), cfg.zlsma, _fiyat(zv),
+                "ustunde" if satir["close"] > zv else "altinda")))
     if not cfg.allow_short:
         adimlar.append(Adim("izin", GECTI, "AL yonu, islem aciliyor"))
 
@@ -886,6 +929,7 @@ def izle(bars: pl.DataFrame, islem: dict, cfg: HeikinConfig = HeikinConfig(),
             else "{} gun".format(_f(saat_sayi / 24, 1)))
     neden = {"ters_sinyal": "ters ikili sinyal",
              "chandelier": "Chandelier dondu",
+             "zlsma": "fiyat ZLSMA'nin ters tarafina gecti",
              "doji": "fitilli mum",
              "kar_al": "kar al",
              "zarar_kes": "zarar kes",
@@ -976,7 +1020,7 @@ def _cikis_nedeni(islem: dict, bars: pl.DataFrame | None = None) -> str:
 # tarama farkli periyotlari ayni cerceveyle olcer -- sessiz yanlis sonuc.
 GOSTERGE_PARAMLARI = frozenset({
     "heikin", "ce_period", "ce_mult", "ce_use_close", "rf_period", "rf_mult",
-    "doji_body", "trend_filter", "onay_15m"})
+    "doji_body", "trend_filter", "onay_15m", "zlsma"})
 
 # Taramada denenecek degerler. Aralik dar tutuldu: her ek deger hem sure hem
 # asiri uyum riski demek.
@@ -995,6 +1039,8 @@ ARAMA_UZAYI = {
     "heikin": [True, False],
     "trend_filter": [0, 100, 200, 300],
     "onay_15m": [False, True],
+    "zlsma": [0, 21, 32, 50, 100],
+    "zlsma_cikis": [False, True],
 }
 
 
