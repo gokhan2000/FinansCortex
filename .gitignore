@@ -8,3 +8,6 @@ ADRES.txt
 config/erisim.json
 config/eposta.json
 .claude/settings.local.json
+
+# Cikis alarmi: gonderilen olaylar (Actions onbellegi tasir)
+.alarm/

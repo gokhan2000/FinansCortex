@@ -1,0 +1,48 @@
+# Cikis / giris alarmi (ntfy ile telefona). Kullanici istegi, 8 Kasim 2026.
+# 4 saatlik barlar 00/04/08/12/16/20 UTC'de kapanir; her kapanisin hemen
+# sonrasinda uc kez bakilir (:03, :18, :33). Mesaj yeni bir olay varsa gider;
+# ayni olay iki kez gitmesin diye gonderilenler Actions onbelleginde tutulur.
+# Veri Dukascopy'den cekilir, depoya YAZILMAZ (commit yok -> Streamlit
+# yeniden baslamaz).
+# Gerekli: GitHub > Settings > Secrets and variables > Actions > NTFY_KONU
+name: Cikis alarmi
+
+on:
+  schedule:
+    - cron: "3,18,33 0,4,8,12,16,20 * * 1-5"   # hafta ici
+    - cron: "3,18,33 0 * * 6"                  # cuma 20 UTC barinin kapanisi
+  workflow_dispatch:
+    inputs:
+      deneme:
+        description: "Yalniz deneme mesaji gonder (1 = evet)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cikis-alarm
+  cancel-in-progress: false
+
+jobs:
+  izle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install dukascopy-python==4.0.1 duckdb==1.5.5 polars==1.43.2 numpy==1.26.4 pandas==2.1.4 pyarrow==24.0.0
+      - name: Gonderilenler onbellegi
+        uses: actions/cache@v4
+        with:
+          path: .alarm
+          key: alarm-${{ github.run_id }}
+          restore-keys: alarm-
+      - run: python scripts/cikis_izle.py
+        env:
+          NTFY_KONU: ${{ secrets.NTFY_KONU }}
+          TEST: ${{ github.event.inputs.deneme }}
