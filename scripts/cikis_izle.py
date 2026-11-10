@@ -169,7 +169,7 @@ def saglik_mesajlari(simdi: datetime) -> list[dict]:
 def gonder(konu: str, o: dict) -> None:
     govde = json.dumps({
         "topic": konu, "title": o["baslik"], "message": o["mesaj"],
-        "priority": 4 if o["tur"] in ("cikis", "uyari") else
+        "priority": 4 if o["tur"] in ("cikis", "giris", "uyari") else
         (1 if o["tur"] == "saglik" else 3),
         "tags": {"cikis": ["red_circle"], "giris": ["green_circle"],
                  "uyari": ["warning"], "saglik": ["white_check_mark"]}.get(
