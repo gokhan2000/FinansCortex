@@ -26,6 +26,10 @@ def zamanlar(ayar: dict) -> set[str]:
 
 def calismali(ayar: dict, simdi: datetime) -> bool:
     tf = zamanlar(ayar)
+    if not tf:
+        return False
+    if simdi.hour == 7 and simdi.minute < 50:     # gunluk "calisiyor" ozeti
+        return True
     if "15m" in tf:
         bas, bit = ayar.get("saat15", [10, 22])
         if bas <= (simdi.hour + 3) % 24 < bit:     # TR = UTC+3

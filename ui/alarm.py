@@ -37,6 +37,12 @@ def _git(*args: str) -> tuple[bool, str]:
     return p.returncode == 0, (p.stdout + p.stderr).strip()
 
 
+def _gonderilmemis() -> bool:
+    """config/alarm.json'da GitHub'a gitmemis degisiklik var mi."""
+    ok, cikti = _git("status", "--porcelain", "--", "config/alarm.json")
+    return ok and bool(cikti.strip())
+
+
 def _gonder() -> tuple[bool, str]:
     """config/alarm.json'u GitHub'a yollar (baska dosyaya dokunmaz)."""
     kimlik = ["-c", "user.name=DeepCortex", "-c",
@@ -141,22 +147,33 @@ def render() -> None:
     degisti = hedef != {"saat15": ayar.get("saat15", [10, 22]),
                         "stratejiler": ayar["stratejiler"]}
     bulut = _bulutta_mi()
-    c = st.columns([1, 1.3, 2.7])
-    if c[0].button("Kaydet", type="primary", disabled=bulut or not degisti):
-        alarm.kaydet(hedef)
-        st.session_state["al_kayit"] = True
-        st.rerun()
     if bulut:
         st.warning("Bu bulut kopyasi. Ayar yalniz evdeki programdan "
                    "degistirilir.")
-    elif st.session_state.pop("al_kayit", False):
-        st.success("Kaydedildi. Alarmin calismasi icin **GitHub'a gonder**.")
-    if c[1].button("GitHub'a gonder (alarm calissin)", disabled=bulut):
+    c = st.columns([1.6, 2.4])
+    # Tek dugme: kaydet + GitHub'a gonder. (Eskiden iki dugmeydi; kullanici
+    # yalniz Kaydet'e basti, ayar GitHub'a gitmedi ve 15 dk alarmi hic
+    # calismadi -- 10.11.2026.)
+    if c[0].button("Kaydet ve GitHub'a gonder", type="primary",
+                   disabled=bulut):
+        alarm.kaydet(hedef)
         with st.spinner("GitHub'a gonderiliyor..."):
             ok, cikti = _gonder()
-        (st.success if ok else st.error)(
-            "GitHub'a gonderildi. Alarm bir sonraki kontrolde yeni ayari "
-            "kullanir." if ok else "Gonderilemedi:\n\n" + cikti)
+        st.session_state["al_sonuc"] = (ok, cikti)
+        st.rerun()
+    sonuc = st.session_state.pop("al_sonuc", None)
+    if sonuc:
+        ok, cikti = sonuc
+        if ok:
+            st.success("Kaydedildi ve GitHub'a gonderildi. Alarm bir sonraki "
+                       "kontrolde yeni ayari kullanir.")
+        else:
+            st.error("Kaydedildi ama GitHub'a GONDERILEMEDI (alarm eski ayarla "
+                     "calisir):\n\n" + cikti)
+    elif not bulut and _gonderilmemis():
+        st.warning("Bu ayar bilgisayarinda kayitli ama GitHub'a gonderilmemis: "
+                   "alarm hala ESKI ayarla calisiyor. **Kaydet ve GitHub'a "
+                   "gonder**'e bas.")
     n = sum(len(v["secim"]) for v in yeni.values())
     st.caption("{} strateji · {} varlik secimi. Ilk kurulum: telefona ntfy "
                "uygulamasi + GitHub'da NTFY_KONU gizli anahtari "

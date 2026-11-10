@@ -68,6 +68,9 @@ def saat(t: datetime) -> str:
     return t.astimezone(TZ).strftime("%d.%m %H:%M")
 
 
+SAGLIK: list[dict] = []     # her izlenen (strateji, varlik, dilim) icin son durum
+
+
 def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime,
             giris: bool, cikis: bool) -> list[dict]:
     bar_saat, gun, _ = alarm.ZAMANLAR[tf]
@@ -77,11 +80,20 @@ def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime,
                              start=simdi - timedelta(days=gun + 60))
     # Yalniz KAPANMIS barlar: son kova yarim kalmis olabilir.
     bars = bars.filter(pl.col("ts") + bar <= simdi)
+    bilgi = dict(ad=ad, code=code, tf=tf, son_bar=None, son_islem="yok")
+    SAGLIK.append(bilgi)
     if bars.height < 400:
+        bilgi["son_islem"] = f"yetersiz veri ({bars.height} bar)"
         return []
+    bilgi["son_bar"] = bars["ts"][-1] + bar          # son KAPANMIS barin kapanisi
     res = hr.run_bars(bars, code, tf, cfg, days=gun)
     if res.trades.is_empty():
         return []
+    sn = res.trades.tail(1).to_dicts()[0]
+    yon = "AL" if sn["yon"] == 1 else "SAT"
+    bilgi["son_islem"] = (f"{yon} pozisyonu acik (giris {saat(sn['giris_ts'])})"
+                          if sn["neden"] == "veri_sonu" else
+                          f"son cikis {saat(sn['cikis_ts'])}")
     son = bars["ts"][-1]
     # Olay hem "son N bar"da hem GERCEK ZAMANA yakin olmali: veri bayatsa
     # (indirme hatasi, tatil) eski olaylar yeni gibi gonderilmesin.
@@ -110,11 +122,58 @@ def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime,
     return cikti
 
 
+# 24 saat islem goren varliklar: hafta ici veri bayatlarsa uyarilir (indeksler
+# gece kapali oldugu icin bu kontrole girmez).
+ISLEMDE_24S = {"EURUSD", "XAUUSD", "XAGUSD", "BRENT", "WTI"}
+
+
+def piyasa_acik(t: datetime) -> bool:
+    """Forex/metal/enerji icin kabaca acik saat (UTC): Pzt 03 - Cum 19."""
+    g = t.weekday()
+    return g in (1, 2, 3) or (g == 0 and t.hour >= 3) or (g == 4 and t.hour < 19)
+
+
+def saglik_mesajlari(simdi: datetime) -> list[dict]:
+    """Sessiz bozulma olmasin: (a) gunde bir kez 'alarm calisiyor' ozeti
+    (07 UTC = 10 TR), (b) veri bayatsa gunde bir uyari.
+
+    Alarm 'olay yok' ile 'calismiyor'u ayirt edemezdi (kullanici, 10.11.2026:
+    'bir daha sinyal gondermedi')."""
+    gun = f"{simdi:%Y-%m-%d}"
+    cikti = []
+    if simdi.hour == 7 and simdi.minute < 50 and SAGLIK:
+        satir = [f"{b['code']} {ETIKET[b['tf']]}: son bar "
+                 f"{saat(b['son_bar']) if b['son_bar'] else 'YOK'} · {b['son_islem']}"
+                 for b in SAGLIK]
+        cikti.append(dict(
+            anahtar=f"saglik|{gun}", tur="saglik", ts=simdi,
+            baslik="DeepCortex alarm · calisiyor",
+            mesaj=("Alarm calisiyor; yeni olay olursa mesaj gelir.\n"
+                   + "\n".join(satir[:12]))))
+    if piyasa_acik(simdi):
+        for b in SAGLIK:
+            if b["code"] not in ISLEMDE_24S:
+                continue
+            bar = alarm.bar_suresi(b["tf"])
+            if b["son_bar"] is None or simdi - b["son_bar"] > bar + timedelta(hours=2):
+                cikti.append(dict(
+                    anahtar=f"bayat|{gun}|{b['code']}|{b['tf']}", tur="uyari",
+                    ts=simdi, baslik=f"UYARI · {b['code']} verisi bayat",
+                    mesaj=(f"{b['code']} {ETIKET[b['tf']]}: son kapanmis bar "
+                           f"{saat(b['son_bar']) if b['son_bar'] else 'YOK'} TR. "
+                           "Veri kaynagindan veri gelmiyor olabilir; bu "
+                           "durumda alarm sessiz kalir.")))
+    return cikti
+
+
 def gonder(konu: str, o: dict) -> None:
     govde = json.dumps({
         "topic": konu, "title": o["baslik"], "message": o["mesaj"],
-        "priority": 4 if o["tur"] == "cikis" else 3,
-        "tags": ["red_circle" if o["tur"] == "cikis" else "green_circle"],
+        "priority": 4 if o["tur"] in ("cikis", "uyari") else
+        (1 if o["tur"] == "saglik" else 3),
+        "tags": {"cikis": ["red_circle"], "giris": ["green_circle"],
+                 "uyari": ["warning"], "saglik": ["white_check_mark"]}.get(
+                     o["tur"], []),
     }).encode("utf-8")
     istek = urllib.request.Request(
         "https://ntfy.sh/", data=govde,
@@ -172,6 +231,7 @@ def main() -> None:
                         print(f"HATA {code} {tf}: {exc}", flush=True)
         con.close()
 
+    yeni += saglik_mesajlari(simdi)
     bekleyen = [o for o in yeni if o["anahtar"] not in gonderilen]
     print(f"{len(yeni)} olay, {len(bekleyen)} yeni (zaman {simdi:%Y-%m-%d %H:%M} UTC)")
     for o in sorted(bekleyen, key=lambda x: x["ts"]):
