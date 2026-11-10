@@ -43,14 +43,14 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import polars as pl  # noqa: E402
 
-from alarm_kapi import calismali  # noqa: E402  (scripts/ ayni klasor)
+from alarm_kapi import calismali, durum_oku, durum_yaz  # noqa: E402  (scripts/ ayni klasor)
 from finans_cortex import alarm, bulut, heikin_range as hr, ingest, storage  # noqa: E402
 
 DURUM = ROOT / ".alarm" / "durum.json"
 TZ = ZoneInfo("Europe/Istanbul")
 
 ETIKET = {"15m": "15 dakika", "4h": "4 saat", "1d": "gunluk"}
-GERI_BAR = 3          # kacirilan calismayi yakalamak icin son N bar
+GERI_BAR = 4          # kacirilan calismayi yakalamak icin son N bar
 NEDEN = {
     "zlsma": "fiyat ZLSMA'nin ters tarafina gecti",
     "ters_sinyal": "Chandelier ters yone dondu",
@@ -66,6 +66,12 @@ def fiyat(v: float) -> str:
 
 def saat(t: datetime) -> str:
     return t.astimezone(TZ).strftime("%d.%m %H:%M")
+
+
+def once(fark: timedelta) -> str:
+    """'12 dk once' / '3 saat once': sinyal ne kadar ESKI (gecikme gorunsun)."""
+    dk = max(0, int(fark.total_seconds() // 60))
+    return f"{dk} dk once" if dk < 120 else f"{dk // 60} saat once"
 
 
 SAGLIK: list[dict] = []     # her izlenen (strateji, varlik, dilim) icin son durum
@@ -110,7 +116,8 @@ def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime,
                        f"Cikis ~{fiyat(t['cikis'])} · {NEDEN.get(t['neden'], t['neden'])}\n"
                        f"Giris {fiyat(t['giris'])} ({saat(t['giris_ts'])}) → "
                        f"{t['getiri'] * 100:+.2f}% (maliyet dahil)\n"
-                       f"Mum kapanisi {saat(t['cikis_ts'] + bar)} TR")))
+                       f"Mum kapanisi {saat(t['cikis_ts'] + bar)} TR "
+                       f"({once(simdi - (t['cikis_ts'] + bar))})")))
         if giris and t["giris_ts"] >= sinir:
             cikti.append(dict(
                 anahtar=f"{ad}|{code}|{tf}|giris|{t['giris_ts'].isoformat()}",
@@ -118,7 +125,8 @@ def olaylar(con, code: str, tf: str, ad: str, cfg, simdi: datetime,
                 baslik=f"GIRIS · {code} · {ad}",
                 mesaj=(f"{code} {ETIKET[tf]}: yeni {yon} sinyali\n"
                        f"Giris ~{fiyat(t['giris'])}\n"
-                       f"Mum kapanisi {saat(t['giris_ts'] + bar)} TR")))
+                       f"Mum kapanisi {saat(t['giris_ts'] + bar)} TR "
+                       f"({once(simdi - (t['giris_ts'] + bar))})")))
     return cikti
 
 
@@ -141,7 +149,7 @@ def saglik_mesajlari(simdi: datetime) -> list[dict]:
     'bir daha sinyal gondermedi')."""
     gun = f"{simdi:%Y-%m-%d}"
     cikti = []
-    if simdi.hour == 7 and simdi.minute < 50 and SAGLIK:
+    if simdi.hour >= 7 and SAGLIK:      # gunun 07 UTC sonrasi ilk tam calismasi
         satir = [f"{b['code']} {ETIKET[b['tf']]}: son bar "
                  f"{saat(b['son_bar']) if b['son_bar'] else 'YOK'} · {b['son_islem']}"
                  for b in SAGLIK]
@@ -197,10 +205,9 @@ def main() -> None:
     simdi = (datetime.fromisoformat(os.environ["SIMDI"]).astimezone(timezone.utc)
              if os.environ.get("SIMDI") else datetime.now(timezone.utc))
     konu = os.environ.get("NTFY_KONU", "").strip()
-    gonderilen = (set(json.loads(DURUM.read_text("utf-8")))
-                  if DURUM.exists() else set())
+    gonderilen, son_calisma = durum_oku()
 
-    if not calismali(ayar, simdi) and os.environ.get("ZORLA") != "1":
+    if not calismali(ayar, simdi, son_calisma) and os.environ.get("ZORLA") != "1":
         print("Bu dakikada izlenecek bar kapanisi yok; atlandi.")
         return
     with tempfile.TemporaryDirectory() as tmp:
@@ -244,10 +251,10 @@ def main() -> None:
             print("  (NTFY_KONU yok: gonderilmedi)")
             continue
         gonderilen.add(o["anahtar"])
-    if not kuru and konu:
-        DURUM.parent.mkdir(exist_ok=True)
-        # Yalniz son 500 anahtar: dosya buyumesin.
-        DURUM.write_text(json.dumps(sorted(gonderilen)[-500:]), "utf-8")
+    if not kuru:
+        # NTFY_KONU olmasa da yazilir: son tam calisma zamani yakalama kurali
+        # icin gerekli.
+        durum_yaz(gonderilen, simdi)
 
 
 if __name__ == "__main__":

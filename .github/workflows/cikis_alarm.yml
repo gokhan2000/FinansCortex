@@ -1,6 +1,7 @@
 # Cikis / giris alarmi (ntfy ile telefona). Kullanici istegi, 8-9 Kasim 2026.
 # Neyin izlenecegi config/alarm.json'dadir (programdaki Alarmlar ekrani yazar).
-# Her 15 dakikada tetiklenir ama ILK adim "bu dakikada isim var mi" diye bakar
+# Her 15 dakikada tetiklenmesi ISTENIR (GitHub pratikte cok seyrek tetikliyor;
+# bu yuzden alarm_kapi.py 'yakalama' kuralini kullanir). ILK adim "bu dakikada isim var mi" diye bakar
 # (alarm_kapi.py): 15 dk secili degilse yalniz 4 saatlik kapanislarda tam
 # calisir, digerlerinde ~10 saniyede biter -> GitHub dakikasi harcanmaz.
 # Veri Dukascopy'den cekilir, depoya YAZILMAZ (commit yok -> Streamlit
@@ -10,8 +11,10 @@ name: Cikis alarmi
 
 on:
   schedule:
-    - cron: "3,18,33,48 * * * 1-5"      # hafta ici, 15 dakikada bir
-    - cron: "3,18,33,48 0 * * 6"        # cuma 20 UTC barinin kapanisi (cumartesi 00)
+    # Dakikalar bilerek "yuvarlak" degil: GitHub saat basi (:00-:05) cok yogun,
+    # orada zamanlanan isler gecikiyor ya da dusuyor.
+    - cron: "7,22,37,52 * * * 1-5"      # hafta ici, 15 dakikada bir (en iyi gayretle)
+    - cron: "7,22,37,52 0 * * 6"        # cuma 20 UTC barinin kapanisi (cumartesi 00)
   workflow_dispatch:
     inputs:
       deneme:
@@ -32,6 +35,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # Son tam calisma zamani + gonderilenler burada; kapi bunu okur.
+      - name: Gonderilenler onbellegi
+        uses: actions/cache@v4
+        with:
+          path: .alarm
+          key: alarm-${{ github.run_id }}
+          restore-keys: alarm-
       - name: Bu dakikada is var mi
         id: kapi
         run: python3 scripts/alarm_kapi.py
@@ -44,13 +54,6 @@ jobs:
       - name: Bagimliliklar
         if: steps.kapi.outputs.devam == 'true' || github.event.inputs.deneme == '1'
         run: pip install dukascopy-python==4.0.1 duckdb==1.5.5 polars==1.43.2 numpy==1.26.4 pandas==2.1.4 pyarrow==24.0.0
-      - name: Gonderilenler onbellegi
-        if: steps.kapi.outputs.devam == 'true'
-        uses: actions/cache@v4
-        with:
-          path: .alarm
-          key: alarm-${{ github.run_id }}
-          restore-keys: alarm-
       - name: Izle ve mesaj gonder
         if: steps.kapi.outputs.devam == 'true' || github.event.inputs.deneme == '1'
         run: python scripts/cikis_izle.py
