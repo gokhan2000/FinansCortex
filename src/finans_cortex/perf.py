@@ -16,6 +16,9 @@ ISLEM LISTESI SOZLESMESI (TRADE_SCHEMA)
     neden              cikis nedeni etiketi
     getiri             oransal, MALIYET DAHIL (spread dusulmus)
     R                  getiri / baslangic riski; risk tanimsizsa NaN
+    kat                pozisyon buyuklugu carpani (1 = normal). `getiri` bu
+                       carpanla CARPILMIS haldedir (2 kat pozisyon = 2 kat
+                       kar/zarar ve 2 kat maliyet). R birim pozisyon icindir.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ TRADE_SCHEMA = {
     "neden": pl.Utf8,
     "getiri": pl.Float64,
     "R": pl.Float64,
+    "kat": pl.Float64,
 }
 
 
@@ -60,7 +64,7 @@ def daily_equity(trades: pl.DataFrame, bars: pl.DataFrame) -> pl.DataFrame:
     toparlansa egride hic gorunmuyordu, al-tut ise her gun degerleniyordu --
     MaxDD/Sharpe iki taraf icin farkli olcuyle hesaplaniyordu.
 
-    Islemin degeri V = 1 + yon*(fiyat - giris)/giris; cikis gununde
+    Islemin degeri V = 1 + kat*yon*(fiyat - giris)/giris; cikis gununde
     V = 1 + getiri (maliyet dahil). Gunluk getiri V/V_onceki - 1, yani gunluk
     getirilerin carpimi islemin getirisine BIREBIR esittir: son sermaye eski
     yontemle ayni, yalniz yol farkli. `bars` icinde `tday` sutunu olmalidir
@@ -72,6 +76,8 @@ def daily_equity(trades: pl.DataFrame, bars: pl.DataFrame) -> pl.DataFrame:
     if trades.is_empty():
         per = pl.DataFrame(schema={"tday": pl.Date, "ret": pl.Float64})
     else:
+        if "kat" not in trades.columns:
+            trades = trades.with_columns(pl.lit(1.0).alias("kat"))
         per = (
             trades.with_row_index("_i")
             .with_columns(
@@ -86,8 +92,8 @@ def daily_equity(trades: pl.DataFrame, bars: pl.DataFrame) -> pl.DataFrame:
             .with_columns(
                 pl.when(pl.col("tday") == pl.col("_c"))
                 .then(1 + pl.col("getiri"))
-                .otherwise(1 + pl.col("yon") * (pl.col("_kap") - pl.col("giris"))
-                           / pl.col("giris"))
+                .otherwise(1 + pl.col("kat") * pl.col("yon")
+                           * (pl.col("_kap") - pl.col("giris")) / pl.col("giris"))
                 .alias("_v")
             )
             .with_columns(
@@ -158,4 +164,35 @@ def metrics(trades: pl.DataFrame, daily: pl.DataFrame, bars: pl.DataFrame) -> di
         "short_%": side(-1),
         "nedenler": dict(trades.group_by("neden").len().sort("len", descending=True).iter_rows()),
     })
+    return out
+
+
+def onceki_sonuca_gore(trades: pl.DataFrame) -> list[dict]:
+    """Bir onceki islemin sonucuna gore ayrilmis ozet (13 Kasim 2026).
+
+    "Zarardan sonra katla" taktiginin dayandigi soru: zararla kapanan bir
+    islemden SONRA gelen islem ortalamadan iyi mi? Katlama ancak bu dogruysa
+    kenar uretir; degilse yalnizca oynakligi buyutur. Olcu BIRIM pozisyon
+    uzerindendir (getiri / kat) -- katlamanin kendisi sonucu sisirmesin.
+    Ilk islem (oncesi yok) hicbir gruba girmez.
+    """
+    if trades.height < 2:
+        return []
+    kat = trades["kat"] if "kat" in trades.columns else pl.repeat(
+        1.0, trades.height, eager=True)
+    birim = (trades["getiri"] / kat).to_list()
+    out = []
+    for ad, secim in (("Zarardan sonraki islem", lambda p: p < 0),
+                      ("Kardan sonraki islem", lambda p: p >= 0)):
+        g = [birim[i] for i in range(1, len(birim)) if secim(birim[i - 1])]
+        if not g:
+            out.append({"grup": ad, "islem": 0, "kazanan_%": float("nan"),
+                        "ort_bp": float("nan"), "toplam_%": 0.0})
+            continue
+        out.append({
+            "grup": ad, "islem": len(g),
+            "kazanan_%": round(100.0 * sum(1 for x in g if x > 0) / len(g), 1),
+            "ort_bp": round(10000 * sum(g) / len(g), 1),
+            "toplam_%": round(100 * sum(g), 1),
+        })
     return out

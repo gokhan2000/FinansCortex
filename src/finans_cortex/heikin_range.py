@@ -146,6 +146,14 @@ class HeikinConfig:
     zlsma_cikis: bool = False
     """Fiyat ZLSMA'nin pozisyonun TERSI tarafina gecince bar kapanisinda cik
     (betikteki cikis kurali). `zlsma` periyodu kapaliysa etkisizdir."""
+    katla: int = 1
+    """Zarardan sonra katla: en cok kac kat (1 = kapali). Kullanicinin VIOP
+    taktigi (13.11.2026): AL zararla kapaninca (kendisi ters vadeden SAT acip
+    zarari kilitliyordu -- net sifir, yani nakde gecmekle ayni) bir sonraki
+    sinyalde pozisyonu IKIYE katliyordu. Kural: islem zararla kapandiysa
+    sonraki islemin buyuklugu ikiye katlanir (ust sinir bu deger); kar ya da
+    basabasla kapaninca 1'e doner. Kar/zarar VE maliyet buyuklukle carpilir.
+    Sinyalleri degistirmez -- yalniz buyuklugu. Gosterge parametresi DEGIL."""
 
 
 def warmup_bars(cfg: HeikinConfig) -> int:
@@ -451,6 +459,8 @@ def _loop(
 
     rows = []
     pos = 0
+    kat = 1.0                     # siradaki / acik islemin buyukluk carpani
+    kat_max = float(max(1, cfg.katla))
     e_px = stop = risk = 0.0
     target = None
     e_i = 0
@@ -458,12 +468,16 @@ def _loop(
     last_pair = None              # (yon, bar) -- alinmasa bile son ikili sinyal
 
     def close_trade(i: int, why: str, px: float | None = None) -> None:
-        nonlocal pos
+        nonlocal pos, kat
         px = c[i] if px is None else px
         move = (px - e_px) * pos
+        birim = move / e_px - cost
         rows.append((ts[e_i], ts[i], pos, e_px, px, stop, target, why,
-                     move / e_px - cost,
-                     move / risk if risk > 0 else float("nan")))
+                     kat * birim,
+                     move / risk if risk > 0 else float("nan"), kat))
+        # Zarardan sonra katla: sonraki islemin buyuklugu. Kapaliyken
+        # (kat_max = 1) kat hep 1 kalir, sonuc eski motorla birebir aynidir.
+        kat = min(kat * 2.0, kat_max) if birim < 0 else 1.0
         pos = 0
 
     def open_trade(i: int, d: int) -> None:
@@ -587,6 +601,7 @@ def _loop(
         "yeni": (pos != 0 and e_i == n - 1) or (pend != 0 and pend_ts == ts[n - 1]),
         "son_ts": ts[n - 1],
         "son_fiyat": c[n - 1],
+        "kat": kat,
     }
     return rows, state
 

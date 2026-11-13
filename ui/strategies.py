@@ -311,11 +311,12 @@ PARAM_LABELS_HEIKIN = (
     ("trend_filter", "Trend filtresi"),
     ("onay_15m", "15dk Chandelier teyidi"),
     ("zlsma", "ZLSMA filtresi"), ("zlsma_cikis", "ZLSMA cikisi"),
+    ("katla", "Zarardan sonra katla"),
 )
 PARAM_KEYS_HEIKIN = ("_ha", "_ceper", "_cemult", "_ceclose", "_rfper",
                      "_rfmult", "_tol", "_short", "_cecikis", "_doji",
                      "_dojiesik", "_tekters", "_karal", "_zararkes", "_trend", "_onay15",
-                     "_zlsma", "_zlcikis")
+                     "_zlsma", "_zlcikis", "_katla")
 
 # Eski cagrilar icin adlar.
 PARAM_LABELS = PARAM_LABELS_EMA
@@ -401,6 +402,8 @@ def param_text(field: str, value) -> str:
         return "acik" if value else "kapali"
     if field == "tolerance":
         return "{} bar".format(value)
+    if field == "katla":
+        return "en cok {} kat".format(value) if value > 1 else "kapali"
     if field in ("trend_filter", "zlsma"):
         return "{} bar".format(value) if value else "kapali"
     if isinstance(value, float):
@@ -795,7 +798,18 @@ def _heikin_widgets(
                             help="0 = kapali (stop Chandelier cizgisi olur, "
                                  "yalniz bilgi amacli). Ayni barda hem kar "
                                  "hem zarar gorulurse ZARAR sayilir.")
+    st.markdown("**Pozisyon buyuklugu**")
+    katla = st.number_input(
+        "Zarardan sonra katla (en cok kat)", 1, 8, int(defaults.katla), step=1,
+        key=key + "_katla",
+        help="1 = kapali. Bir islem zararla kapaninca SONRAKI islem iki kat "
+             "buyuklukte acilir (10 kontrat -> 20); ust uste zararda bu "
+             "sinira kadar katlanir, karla kapaninca 1'e doner. Sinyalleri "
+             "degistirmez. Kar da zarar da maliyet de katlanir -- teminat "
+             "ihtiyaci da. Ortak stop-loss aciksa katlama sirasi motorun "
+             "kendi sonuclarina gore kalir.")
     return heikin.HeikinConfig(
+        katla=int(katla),
         heikin=ha, ce_period=int(ce_period), ce_mult=float(ce_mult),
         ce_use_close=ce_close, rf_period=int(rf_period), rf_mult=float(rf_mult),
         tolerance=int(tol), allow_short=short, exit_chandelier=ce_exit,

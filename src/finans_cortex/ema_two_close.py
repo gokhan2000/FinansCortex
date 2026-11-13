@@ -266,7 +266,7 @@ def _loop(
             else:
                 move = (xp - e_px) * pos
                 rows.append((ts[e_i], ts[i], pos, e_px, xp, stop0, target, why,
-                             move / e_px - cost, move / risk))
+                             move / e_px - cost, move / risk, 1.0))
                 pos = 0
 
         # 3) Yeni kurulum -- barin KAPANISINDA bilinir.

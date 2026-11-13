@@ -223,6 +223,38 @@
       "not": "Geliştirme motoru önerisi",
       "meta": {},
       "olusturma": "2026-09-24T17:56:34+00:00"
+    },
+    {
+      "key": "strateji-3-2-viop-katlama",
+      "ad": "Strateji 3.2 (VIOP katlama)",
+      "temel": "chandelier_ha",
+      "no": 2,
+      "parametreler": {
+        "heikin": true,
+        "ce_period": 1,
+        "ce_mult": 1.8,
+        "ce_use_close": true,
+        "rf_period": 100,
+        "rf_mult": 3.0,
+        "tolerance": 3,
+        "allow_short": false,
+        "exit_chandelier": false,
+        "doji_exit": false,
+        "doji_body": 0.25,
+        "kar_al": 0.0,
+        "zarar_kes": 0.0,
+        "tek_ters": false,
+        "rf_kullan": false,
+        "onay_15m": false,
+        "trend_filter": 0,
+        "zlsma": 0,
+        "zlsma_cikis": false,
+        "katla": 2
+      },
+      "zaman_dilimi": "4h",
+      "not": "Kullanicinin VIOP taktigi (13.11.2026): yalniz AL; SAT sinyalinde nakde gec (ters vadeden SAT acip zarari kilitlemekle ayni); zararla kapanan islemden sonraki AL iki kat buyuklukte. Olculmedi.",
+      "meta": {},
+      "olusturma": "2026-11-13T19:30:03+00:00"
     }
   ]
 }

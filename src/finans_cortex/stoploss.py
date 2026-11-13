@@ -113,7 +113,8 @@ def _alt_dene(t: dict, bar_ici: bool, orijinal_cikis, a_ts, a_dir, a_cl,
             return dict(t, cikis_ts=a_ts[k] - timedelta(minutes=15),
                         cikis=px, neden=ALT_NEDEN,
                         stop=t["stop"], hedef=float("nan"),
-                        getiri=(px - g) * d / g - cost, R=float("nan"))
+                        getiri=(t.get("kat") or 1.0) * ((px - g) * d / g - cost),
+                        R=float("nan"))
         k += 1
     return t
 
@@ -183,7 +184,10 @@ def trades_uygula(trades: pl.DataFrame, bars: pl.DataFrame, ayar: StopAyar,
                 t = dict(t, cikis_ts=ts[i], cikis=px, neden=neden,
                          stop=sl if sl is not None else float("nan"),
                          hedef=tp if tp is not None else float("nan"),
-                         getiri=(px - g) * d / g - cost,
+                         # `kat`: motorun verdigi buyukluk (zarardan sonra
+                         # katla). Sira motorun KENDI sonuclarina goredir;
+                         # bu katman cikisi degistirince yeniden dizilmez.
+                         getiri=(t.get("kat") or 1.0) * ((px - g) * d / g - cost),
                          R=(px - g) * d / risk if risk == risk and risk > 0
                          else float("nan"))
                 bar_ici = True

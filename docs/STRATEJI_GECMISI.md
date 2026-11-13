@@ -398,6 +398,29 @@ Teşhiste konuşulan eksikler (yapılmadı, sırada): kalibrasyon stratejisi
 modeli (vadeli: swap yok ama fiyatta faiz farkı + vade devri), boştaki paranın
 faizi. Kullanıcı oynaklığa göre pay vermeyi istemedi: **eşit para**.
 
+## Zarardan sonra katla — kullanıcının VİOP taktiği (13 Kasım 2026): KURULDU, ÖLÇÜLMEDİ
+
+Kullanıcı TradingView görüntüsü gönderdi: *"sinyaller tutmuyor galiba."* Ölçüldü:
+motorun Chandelier'ı (1 / 1,8, Heikin Ashi) görüntüdeki 7 sinyalin 7'sini aynı
+sırada veriyor; fark yalnız 4 saatlik bar hizası (biz 00/04/08 UTC, TradingView
+o grafikte 23/03/07 UTC) → en fazla 1 bar kayma. **Grafikler ekranı ise başka
+ayarla çiziyor** (22/3,0 ve 14/2,0, normal mum) — karşılaştırma orada yapılırsa
+tutmaz. Aynı 7 sinyal gerçek kapanıştan 3 kazanç / 4 zarar: TradingView etiketi
+mumun altına/üstüne koyduğu ve mum Heikin Ashi olduğu için grafik kazandırıyor
+gibi görünür.
+
+Kullanıcının kazandığı taktik: AL sinyalinde 10 kontrat AL; SAT gelince AL'ları
+bozmadan ters vadeden 10 SAT (zararı kilitler = nakde geçmek); yeni AL'da
+SAT'ları AL'a çevirir → **20 kontrat AL**. Yani "yalnız AL + zarardan sonra
+ikiye katla". Motora `HeikinConfig.katla` olarak eklendi (bkz.
+`src/finans_cortex/CLAUDE.md`), varyant **Strateji 3.2 (VIOP katlama)** kaydedildi.
+Backtest > Sonuç'ta yeni tablo: *zarardan sonraki işlem* / *kârdan sonraki
+işlem* (birim pozisyon). Katlama ancak ilki belirgin iyiyse kenar üretir.
+**Sonuç ölçülmedi, kullanıcı bakacak.**
+
+Ertelenen: Grafikler ekranına TradingView profili (1 / 1,8, HA; işaretler gerçek
+işlem fiyatında). 4 saatlik hizayı TradingView'e çekmek önerilmedi.
+
 ## Sırada ne var
 
 Anayasa 3.4 adım 1 ("tek strateji, güvenilir backtest sonucu") **tamamlandı ve

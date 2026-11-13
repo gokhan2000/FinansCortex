@@ -394,6 +394,31 @@ XAUUSD/EURUSD/DAX 4s+1g'de çıkışların ~%85'i `zlsma` — ZLSMA fiyata çok 
 olduğu için çıkış çoğunlukla onunla olur; `zlsma_cikis` kapalı/açık karşılaştırması
 Backtest'te kullanıcıda.
 
+## Zarardan sonra katla — pozisyon büyüklüğü (13 Kasım 2026)
+
+`HeikinConfig.katla` (en çok kat, **1 = kapalı**): işlem zararla kapanınca
+sonraki işlemin büyüklüğü ikiye katlanır (üst sınır `katla`), kâr/başabaşta 1'e
+döner. Sinyalleri değiştirmez. İşlem listesine **`kat`** sütunu eklendi
+(`perf.TRADE_SCHEMA`, her motor yazar; EMA hep 1,0). **`getiri` kat ile
+ÇARPILMIŞ hâldedir** (maliyet dahil); `R` birim pozisyon içindir.
+`perf.daily_equity` açık pozisyonu `kat` ile değerler. `perf.onceki_sonuca_gore`
+birim getiriden (getiri / kat) "zarardan / kârdan sonraki işlem" özetini verir.
+
+- `katla` **`GOSTERGE_PARAMLARI`'nda YOK** (prepare'i etkilemez) ve
+  **`ARAMA_UZAYI`'nda YOK** — bilerek: büyüklük kenar değil kaldıraçtır,
+  yıllık getiriye göre tarama onu körlemesine seçerdi.
+- `stoploss.py` çıkışı değiştirdiğinde getiriyi `kat` ile çarpar, ama katlama
+  SIRASI motorun kendi sonuçlarına göre kalır (yeniden dizilmez).
+- Canlı durum sözlüğünde `kat` var (açık / sıradaki işlemin büyüklüğü);
+  ekranlar ve alarm henüz göstermiyor.
+
+**Doğrulandı:** kapalıyken eski motorla birebir aynı (7 ayar × 4 varlık ×
+4s+1g + EMA = 57 koşu, 30.854 işlem, işlem/günlük eğri/ölçü **0 sapma**);
+katla 2 ve 4'te sinyaller değişmiyor, her işlemin katı kurala uyuyor,
+getiri = kat × birim, son sermaye = ∏(1+getiri) (27.542 işlem, **0 ihlal**);
+4 strateji × 8 bölüm AppTest hatasız, katla=2 ile backtest düğmesi hatasız.
+Yedekler: `yedek/*_katla_oncesi.py`.
+
 ## Doğrulanmış olanlar (tekrar test etmeye gerek yok)
 
 - **İdempotentlik:** aynı veri ikinci kez yazılınca `+0 satır`

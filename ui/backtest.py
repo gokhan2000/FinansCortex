@@ -580,6 +580,34 @@ def _section_summary(res, span: str) -> None:
     if m["nedenler"]:
         st.caption("Cikis nedenleri: " + " · ".join(
             "{} {}".format(k, v) for k, v in m["nedenler"].items()))
+    _onceki_sonuc(res.trades)
+
+
+def _onceki_sonuc(trades: pl.DataFrame) -> None:
+    """Zarardan / kardan SONRAKI islemler ayri ayri (13 Kasim 2026).
+
+    "Zarardan sonra katla" ancak zarardan sonraki islem ortalamadan iyiyse
+    ise yarar; bu tablo o soruyu birim pozisyon uzerinden gosterir."""
+    from finans_cortex import perf
+
+    satirlar = perf.onceki_sonuca_gore(trades)
+    if not satirlar:
+        return
+    katli = ("kat" in trades.columns and trades.height
+             and float(trades["kat"].max()) > 1)
+    st.markdown("**Bir onceki islemin sonucuna gore**")
+    st.dataframe(
+        [{"": s["grup"], "Islem": s["islem"], "Kazanan %": s["kazanan_%"],
+          "Islem basina bp": s["ort_bp"], "Toplam %": s["toplam_%"]}
+         for s in satirlar],
+        hide_index=True, width="stretch")
+    st.caption(
+        "Birim pozisyon uzerinden, maliyet dahil (katlamanin etkisi cikarilmis)."
+        " Zarardan sonra katlamak, ancak ust satir alt satirdan belirgin "
+        "iyiyse kenar uretir; degilse yalniz kazanci da kaybi da buyutur."
+        + (" Bu kosuda {} islem katli buyuklukte acildi (en cok {:g} kat)."
+           .format(int((trades["kat"] > 1).sum()), float(trades["kat"].max()))
+           if katli else ""))
 
 
 def _section_trades(res, span: str, key: str, code: str = "",
@@ -962,6 +990,7 @@ def _trade_table(trades: pl.DataFrame, notional: float) -> pl.DataFrame:
         .dt.strftime("%d.%m.%Y %H:%M").alias("Cikis (TR)"),
         pl.when(pl.col("yon") == 1).then(pl.lit("AL"))
         .otherwise(pl.lit("SAT")).alias("Yon"),
+        (pl.col("kat") if "kat" in trades.columns else pl.lit(1.0)).alias("Kat"),
         pl.col("giris").alias("Giris fiyati"),
         pl.col("cikis").alias("Cikis fiyati"),
         pl.col("stop").alias("Stop"),
