@@ -595,7 +595,7 @@ def _onceki_sonuc(trades: pl.DataFrame) -> None:
         return
     katli = ("kat" in trades.columns and trades.height
              and float(trades["kat"].max()) > 1)
-    st.markdown("**Bir onceki islemin sonucuna gore**")
+    st.markdown("**Ayni yondeki bir onceki islemin sonucuna gore**")
     st.dataframe(
         [{"": s["grup"], "Islem": s["islem"], "Kazanan %": s["kazanan_%"],
           "Islem basina bp": s["ort_bp"], "Toplam %": s["toplam_%"]}
@@ -603,8 +603,9 @@ def _onceki_sonuc(trades: pl.DataFrame) -> None:
         hide_index=True, width="stretch")
     st.caption(
         "Birim pozisyon uzerinden, maliyet dahil (katlamanin etkisi cikarilmis)."
-        " Zarardan sonra katlamak, ancak ust satir alt satirdan belirgin "
-        "iyiyse kenar uretir; degilse yalniz kazanci da kaybi da buyutur."
+        " Zarardan sonra katlamak, ancak 'zarardan sonraki' satir 'kardan "
+        "sonraki' satirdan belirgin iyiyse kenar uretir; degilse yalniz "
+        "kazanci da kaybi da buyutur. AL ve SAT ayri zincirdir."
         + (" Bu kosuda {} islem katli buyuklukte acildi (en cok {:g} kat)."
            .format(int((trades["kat"] > 1).sum()), float(trades["kat"].max()))
            if katli else ""))

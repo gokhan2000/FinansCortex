@@ -418,6 +418,12 @@ Backtest > Sonuç'ta yeni tablo: *zarardan sonraki işlem* / *kârdan sonraki
 işlem* (birim pozisyon). Katlama ancak ilki belirgin iyiyse kenar üretir.
 **Sonuç ölçülmedi, kullanıcı bakacak.**
 
+Aynı gün kullanıcı: *"aynısını SAT için de yap, SAT zarara girerse AL ile
+zararı sabitle."* Katlama **yön başına** yapıldı: AL zinciri ile SAT zinciri
+ayrı sayılır (zararlı AL sonraki AL'ı, zararlı SAT sonraki SAT'ı katlar).
+Varyant **Strateji 3.3 (VIOP katlama AL+SAT)**. Özet tablosu da yön başına:
+AL/SAT × zarardan sonraki / kârdan sonraki. Ölçülmedi.
+
 Ertelenen: Grafikler ekranına TradingView profili (1 / 1,8, HA; işaretler gerçek
 işlem fiyatında). 4 saatlik hizayı TradingView'e çekmek önerilmedi.
 

@@ -153,7 +153,12 @@ class HeikinConfig:
     sinyalde pozisyonu IKIYE katliyordu. Kural: islem zararla kapandiysa
     sonraki islemin buyuklugu ikiye katlanir (ust sinir bu deger); kar ya da
     basabasla kapaninca 1'e doner. Kar/zarar VE maliyet buyuklukle carpilir.
-    Sinyalleri degistirmez -- yalniz buyuklugu. Gosterge parametresi DEGIL."""
+    Sinyalleri degistirmez -- yalniz buyuklugu. Gosterge parametresi DEGIL.
+
+    YON BASINA ayri tutulur (kullanici, ayni gun: "aynisini SAT icin de
+    yap"): zararla kapanan AL bir sonraki AL'i, zararla kapanan SAT bir
+    sonraki SAT'i katlar; AL zinciri ile SAT zinciri birbirini etkilemez.
+    Yalniz AL calisan ayarda bu, tek sayacla aynidir."""
 
 
 def warmup_bars(cfg: HeikinConfig) -> int:
@@ -459,7 +464,8 @@ def _loop(
 
     rows = []
     pos = 0
-    kat = 1.0                     # siradaki / acik islemin buyukluk carpani
+    kat = {1: 1.0, -1: 1.0}       # yon basina: siradaki islemin carpani
+    kat_acik = 1.0                # acik islemin carpani
     kat_max = float(max(1, cfg.katla))
     e_px = stop = risk = 0.0
     target = None
@@ -468,21 +474,22 @@ def _loop(
     last_pair = None              # (yon, bar) -- alinmasa bile son ikili sinyal
 
     def close_trade(i: int, why: str, px: float | None = None) -> None:
-        nonlocal pos, kat
+        nonlocal pos
         px = c[i] if px is None else px
         move = (px - e_px) * pos
         birim = move / e_px - cost
         rows.append((ts[e_i], ts[i], pos, e_px, px, stop, target, why,
-                     kat * birim,
-                     move / risk if risk > 0 else float("nan"), kat))
-        # Zarardan sonra katla: sonraki islemin buyuklugu. Kapaliyken
-        # (kat_max = 1) kat hep 1 kalir, sonuc eski motorla birebir aynidir.
-        kat = min(kat * 2.0, kat_max) if birim < 0 else 1.0
+                     kat_acik * birim,
+                     move / risk if risk > 0 else float("nan"), kat_acik))
+        # Zarardan sonra katla: AYNI yondeki sonraki islemin buyuklugu.
+        # Kapaliyken (kat_max = 1) hep 1 kalir, sonuc eski motorla aynidir.
+        kat[pos] = min(kat_acik * 2.0, kat_max) if birim < 0 else 1.0
         pos = 0
 
     def open_trade(i: int, d: int) -> None:
-        nonlocal pos, e_px, stop, risk, e_i, target
+        nonlocal pos, e_px, stop, risk, e_i, target, kat_acik
         pos, e_px, e_i = d, c[i], i
+        kat_acik = kat[d]
         if cfg.zarar_kes > 0:
             # Sabit % zarar kes: stop Chandelier cizgisi degil bu seviye.
             stop = c[i] * (1 - d * cfg.zarar_kes / 100.0)
@@ -601,7 +608,8 @@ def _loop(
         "yeni": (pos != 0 and e_i == n - 1) or (pend != 0 and pend_ts == ts[n - 1]),
         "son_ts": ts[n - 1],
         "son_fiyat": c[n - 1],
-        "kat": kat,
+        "kat": kat_acik if pos else 1.0,
+        "kat_al": kat[1], "kat_sat": kat[-1],
     }
     return rows, state
 

@@ -168,31 +168,39 @@ def metrics(trades: pl.DataFrame, daily: pl.DataFrame, bars: pl.DataFrame) -> di
 
 
 def onceki_sonuca_gore(trades: pl.DataFrame) -> list[dict]:
-    """Bir onceki islemin sonucuna gore ayrilmis ozet (13 Kasim 2026).
+    """AYNI yondeki bir onceki islemin sonucuna gore ozet (13 Kasim 2026).
 
     "Zarardan sonra katla" taktiginin dayandigi soru: zararla kapanan bir
-    islemden SONRA gelen islem ortalamadan iyi mi? Katlama ancak bu dogruysa
-    kenar uretir; degilse yalnizca oynakligi buyutur. Olcu BIRIM pozisyon
-    uzerindendir (getiri / kat) -- katlamanin kendisi sonucu sisirmesin.
-    Ilk islem (oncesi yok) hicbir gruba girmez.
+    AL'dan SONRA gelen AL (SAT icin SAT) ortalamadan iyi mi? Katlama ancak bu
+    dogruysa kenar uretir; degilse yalnizca oynakligi buyutur. Olcu BIRIM
+    pozisyon uzerindendir (getiri / kat) -- katlamanin kendisi sonucu
+    sisirmesin. Katlama yon basina tutuldugu icin "onceki" de ayni yondeki
+    onceki islemdir. Her yonun ilk islemi (oncesi yok) hicbir gruba girmez.
+    Satirlar: yon x (zarardan sonra / kardan sonra); islemi olmayan yon yok.
     """
     if trades.height < 2:
         return []
-    kat = trades["kat"] if "kat" in trades.columns else pl.repeat(
-        1.0, trades.height, eager=True)
-    birim = (trades["getiri"] / kat).to_list()
+    kat = (trades["kat"].to_list() if "kat" in trades.columns
+           else [1.0] * trades.height)
+    yon = trades["yon"].to_list()
+    birim = [g / (k or 1.0) for g, k in zip(trades["getiri"].to_list(), kat)]
     out = []
-    for ad, secim in (("Zarardan sonraki islem", lambda p: p < 0),
-                      ("Kardan sonraki islem", lambda p: p >= 0)):
-        g = [birim[i] for i in range(1, len(birim)) if secim(birim[i - 1])]
-        if not g:
-            out.append({"grup": ad, "islem": 0, "kazanan_%": float("nan"),
-                        "ort_bp": float("nan"), "toplam_%": 0.0})
+    for d, yon_ad in ((1, "AL"), (-1, "SAT")):
+        seri = [b for b, y in zip(birim, yon) if y == d]
+        if len(seri) < 2:
             continue
-        out.append({
-            "grup": ad, "islem": len(g),
-            "kazanan_%": round(100.0 * sum(1 for x in g if x > 0) / len(g), 1),
-            "ort_bp": round(10000 * sum(g) / len(g), 1),
-            "toplam_%": round(100 * sum(g), 1),
-        })
+        for ad, secim in (("zarardan sonraki", lambda p: p < 0),
+                          ("kardan sonraki", lambda p: p >= 0)):
+            g = [seri[i] for i in range(1, len(seri)) if secim(seri[i - 1])]
+            satir = {"grup": "{} - {} {}".format(yon_ad, ad, yon_ad),
+                     "islem": len(g), "kazanan_%": float("nan"),
+                     "ort_bp": float("nan"), "toplam_%": 0.0}
+            if g:
+                satir.update({
+                    "kazanan_%": round(
+                        100.0 * sum(1 for x in g if x > 0) / len(g), 1),
+                    "ort_bp": round(10000 * sum(g) / len(g), 1),
+                    "toplam_%": round(100 * sum(g), 1),
+                })
+            out.append(satir)
     return out

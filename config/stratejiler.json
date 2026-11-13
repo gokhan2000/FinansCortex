@@ -255,6 +255,38 @@
       "not": "Kullanicinin VIOP taktigi (13.11.2026): yalniz AL; SAT sinyalinde nakde gec (ters vadeden SAT acip zarari kilitlemekle ayni); zararla kapanan islemden sonraki AL iki kat buyuklukte. Olculmedi.",
       "meta": {},
       "olusturma": "2026-11-13T19:30:03+00:00"
+    },
+    {
+      "key": "strateji-3-3-viop-katlama-al-sat",
+      "ad": "Strateji 3.3 (VIOP katlama AL+SAT)",
+      "temel": "chandelier_ha",
+      "no": 3,
+      "parametreler": {
+        "heikin": true,
+        "ce_period": 1,
+        "ce_mult": 1.8,
+        "ce_use_close": true,
+        "rf_period": 100,
+        "rf_mult": 3.0,
+        "tolerance": 3,
+        "allow_short": true,
+        "exit_chandelier": false,
+        "doji_exit": false,
+        "doji_body": 0.25,
+        "kar_al": 0.0,
+        "zarar_kes": 0.0,
+        "tek_ters": false,
+        "rf_kullan": false,
+        "onay_15m": false,
+        "trend_filter": 0,
+        "zlsma": 0,
+        "zlsma_cikis": false,
+        "katla": 2
+      },
+      "zaman_dilimi": "4h",
+      "not": "Strateji 3.2'nin iki yonlusu (kullanici, 13.11.2026): AL zinciri ve SAT zinciri ayri. Zararla kapanan AL sonraki AL'i, zararla kapanan SAT sonraki SAT'i iki kat buyuklukte actirir. Olculmedi.",
+      "meta": {},
+      "olusturma": "2026-11-13T19:42:37+00:00"
     }
   ]
 }

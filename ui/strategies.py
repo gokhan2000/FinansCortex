@@ -802,9 +802,11 @@ def _heikin_widgets(
     katla = st.number_input(
         "Zarardan sonra katla (en cok kat)", 1, 8, int(defaults.katla), step=1,
         key=key + "_katla",
-        help="1 = kapali. Bir islem zararla kapaninca SONRAKI islem iki kat "
-             "buyuklukte acilir (10 kontrat -> 20); ust uste zararda bu "
-             "sinira kadar katlanir, karla kapaninca 1'e doner. Sinyalleri "
+        help="1 = kapali. Bir islem zararla kapaninca AYNI YONDEKI sonraki "
+             "islem iki kat buyuklukte acilir (10 kontrat -> 20); ust uste "
+             "zararda bu sinira kadar katlanir, karla kapaninca 1'e doner. "
+             "AL ve SAT ayri sayilir: zararli AL sonraki AL'i, zararli SAT "
+             "sonraki SAT'i katlar. Sinyalleri "
              "degistirmez. Kar da zarar da maliyet de katlanir -- teminat "
              "ihtiyaci da. Ortak stop-loss aciksa katlama sirasi motorun "
              "kendi sonuclarina gore kalir.")
