@@ -424,6 +424,11 @@ ayrı sayılır (zararlı AL sonraki AL'ı, zararlı SAT sonraki SAT'ı katlar).
 Varyant **Strateji 3.3 (VIOP katlama AL+SAT)**. Özet tablosu da yön başına:
 AL/SAT × zarardan sonraki / kârdan sonraki. Ölçülmedi.
 
+Kullanıcı düzeltti: kilitleme SAT sinyaliyle değil **belli bir zarara
+ulaşınca** yapılıyor; eşiğe gelmeden SAT sinyali gelirse pozisyon kapatılır
+(*"gerek yok gereksiz heyecana"*). Yeni kod gerekmedi: 3.2 ve 3.3'e
+`zarar_kes = 1,0` (%; kullanıcı parametre olarak istedi, varsayılan %1) eklendi.
+
 Ertelenen: Grafikler ekranına TradingView profili (1 / 1,8, HA; işaretler gerçek
 işlem fiyatında). 4 saatlik hizayı TradingView'e çekmek önerilmedi.
 

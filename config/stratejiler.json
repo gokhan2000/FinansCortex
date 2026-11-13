@@ -242,7 +242,7 @@
         "doji_exit": false,
         "doji_body": 0.25,
         "kar_al": 0.0,
-        "zarar_kes": 0.0,
+        "zarar_kes": 1.0,
         "tek_ters": false,
         "rf_kullan": false,
         "onay_15m": false,
@@ -252,9 +252,10 @@
         "katla": 2
       },
       "zaman_dilimi": "4h",
-      "not": "Kullanicinin VIOP taktigi (13.11.2026): yalniz AL; SAT sinyalinde nakde gec (ters vadeden SAT acip zarari kilitlemekle ayni); zararla kapanan islemden sonraki AL iki kat buyuklukte. Olculmedi.",
+      "not": "Kullanicinin VIOP taktigi (13.11.2026), yalniz AL: sinyalde gir; pozisyon %1 zarara degerse kilitle (zarar kes -- ters vadeden kontratla sabitlemekle ayni); ters sinyalde kapat; zararla kapanan islemden sonraki ayni yonlu islem iki kat buyuklukte. Zarar esigi ve kat kenar cubugundan degisir. Olculmedi.",
       "meta": {},
-      "olusturma": "2026-11-13T19:30:03+00:00"
+      "olusturma": "2026-11-13T19:30:03+00:00",
+      "guncelleme": "2026-11-13T20:05:03+00:00"
     },
     {
       "key": "strateji-3-3-viop-katlama-al-sat",
@@ -274,7 +275,7 @@
         "doji_exit": false,
         "doji_body": 0.25,
         "kar_al": 0.0,
-        "zarar_kes": 0.0,
+        "zarar_kes": 1.0,
         "tek_ters": false,
         "rf_kullan": false,
         "onay_15m": false,
@@ -284,9 +285,10 @@
         "katla": 2
       },
       "zaman_dilimi": "4h",
-      "not": "Strateji 3.2'nin iki yonlusu (kullanici, 13.11.2026): AL zinciri ve SAT zinciri ayri. Zararla kapanan AL sonraki AL'i, zararla kapanan SAT sonraki SAT'i iki kat buyuklukte actirir. Olculmedi.",
+      "not": "Kullanicinin VIOP taktigi (13.11.2026), AL ve SAT ayri zincir: sinyalde gir; pozisyon %1 zarara degerse kilitle (zarar kes -- ters vadeden kontratla sabitlemekle ayni); ters sinyalde kapat; zararla kapanan islemden sonraki ayni yonlu islem iki kat buyuklukte. Zarar esigi ve kat kenar cubugundan degisir. Olculmedi.",
       "meta": {},
-      "olusturma": "2026-11-13T19:42:37+00:00"
+      "olusturma": "2026-11-13T19:42:37+00:00",
+      "guncelleme": "2026-11-13T20:05:03+00:00"
     }
   ]
 }
